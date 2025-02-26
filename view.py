@@ -20,7 +20,7 @@ def parse_log_entry(log, filter_ip_resource=True):
     pattern = re.compile(
         r"(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d+)"
         r" from (?P<ip>[\d\.]+):\d+ accepted tcp:(?P<resource>[\w\.-]+):\d+ "
-        r"\[.*? -> (?P<destination>\S+)\] email: (?P<email>\S+)"
+        r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\] email: (?P<email>\S+)"
     )
     match = pattern.match(log)
     if match:
