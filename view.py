@@ -116,6 +116,7 @@ def print_sorted_logs(data):
                 print(f"    Resource: {highlight_resource(resource)} -> [{destination}]")
 
 def print_summary(summary):
+    clear_screen()
     for email in sorted(summary.keys(), key=extract_email_number):
         ips, regions = summary[email]
         email_colored = highlight_email(email)
