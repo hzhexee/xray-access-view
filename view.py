@@ -230,6 +230,7 @@ if __name__ == "__main__":
             
         # Если выбран режим online
         if args.online:
+            filter_ip_resource = False
             with open(log_file_path, "r") as file:
                 logs = file.readlines()
 
