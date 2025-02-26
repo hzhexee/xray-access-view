@@ -29,13 +29,13 @@ apt install python3-geoip2
 ### Запуск в основном режиме
 
 ```bash
-python3 <(curl -sL https://github.com/Davoyan/xray-acess-view/raw/main/view.py)
+python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
 ```
 
 ### Запуск в режиме сводки
 
 ```bash
-python3 <(curl -sL https://github.com/Davoyan/xray-acess-view/raw/main/view.py) --summary
+python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py) --summary
 ```
 
 #### Доступ к логам
