@@ -21,9 +21,7 @@
 ## Установка и использование
 
 #### Кастомный путь для логов
-```
-Укажите путь до логов (нажмите Enter для использования '/var/lib/marzban/access.log'): '/my/path/access.log'
-```
+
 
 ### Запуск в основном режиме
 
@@ -36,3 +34,18 @@ python3 <(curl -sL https://github.com/Davoyan/xray-acess-view/raw/main/view.py)
 ```bash
 python3 <(curl -sL https://github.com/Davoyan/xray-acess-view/raw/main/view.py) --summary
 ```
+
+#### Доступ к логам
+По умолчанию используется путь '/var/lib/marzban/access.log', если вы хотите использовать свой путь, во время запуска скрипта следуйте следующему:
+```
+Укажите путь до логов (нажмите Enter для использования '/var/lib/marzban/access.log'): '/my/path/access.log'
+```
+
+В конфигурации xray у вас должены быть прописаны access логи
+```Пример
+"log": {
+    "access": "/var/lib/marzban/access.log",
+    "loglevel": "warning",
+},
+```
+
