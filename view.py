@@ -19,7 +19,7 @@ def download_geoip_db(db_url, db_path):
 def parse_log_entry(log, filter_ip_resource=True):
     pattern = re.compile(
         r"(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d+)"
-        r" from (?P<ip>(?:[\d\.]+|[a-fA-F0-9:]+)):\d+ accepted (?P<protocol>\w+):(?P<resource>[\w\.-]+):\d+ "
+        r" from (?P<ip>[\d\.]+):\d+ accepted tcp:(?P<resource>[\w\.-]+):\d+ "
         r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\] email: (?P<email>\S+)"
     )
     match = pattern.match(log)
@@ -28,11 +28,8 @@ def parse_log_entry(log, filter_ip_resource=True):
         email = match.group("email")
         resource = match.group("resource")
         destination = match.group("destination")
-        
-        # Фильтрация, если указано
         if filter_ip_resource and re.match(r"^\d+\.\d+\.\d+\.\d+$", resource):
             return None
-        
         return ip, email, resource, destination
     return None
 
