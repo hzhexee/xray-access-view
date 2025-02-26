@@ -22,6 +22,7 @@ def parse_log_entry(log, filter_ip_resource):
         r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+)):\d+ accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
         r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\] email: (?P<email>\S+)"
     )
+
     match = pattern.match(log)
     if match:
         ip = match.group("ip")
@@ -30,10 +31,19 @@ def parse_log_entry(log, filter_ip_resource):
         destination = match.group("destination")
         
         # Фильтрация по IP и ресурсу
-        if filter_ip_resource and re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource):  # Проверка для IPv4
-            return None
-        if filter_ip_resource and re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):  # Проверка для IPv6
-            return None
+        if filter_ip_resource:
+            if re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource) or \
+               re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):
+                return None
+        else:
+            if re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource) or \
+               re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):
+                region_asn = get_region_and_asn(resource, city_reader, asn_reader)
+                country = region_asn.split(",")[0]  # Получаем страну из строки
+                if country in {"Russia", "Belarus"}:
+                    resource = f"\033[91m{resource} ({country})\033[0m"  # Подсветка красным
+                else:
+                    resource = f"{resource} ({country})"
         
         # Убираем проверку по времени
         return ip, email, resource, destination
