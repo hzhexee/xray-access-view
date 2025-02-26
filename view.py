@@ -3,10 +3,17 @@ import os
 import argparse
 import geoip2.database
 import urllib.request
+import chardet
 from collections import defaultdict
 
 def clear_screen():
     os.system('clear' if os.name == 'posix' else 'cls')
+
+def detect_encoding(file_path):
+    with open(file_path, "rb") as f:
+        raw_data = f.read(10000)  # Читаем небольшой фрагмент файла
+    result = chardet.detect(raw_data)
+    return result["encoding"]
 
 def download_geoip_db(db_url, db_path):
     if os.path.exists(db_path):
@@ -32,35 +39,6 @@ def parse_log_entry(log, filter_ip_resource=True):
             return None
         return ip, email, resource, destination
     return None
-
-def extract_email_number(email):
-    match = re.match(r"(\d+)\..*", email)
-    return int(match.group(1)) if match else float('inf')
-
-def highlight_email(email):
-    return f"\033[92m{email}\033[0m"
-
-def highlight_ip(ip):
-    return f"\033[94m{ip}\033[0m"
-
-def highlight_resource(resource):
-    highlight_domains = {
-        "mycdn.me", "mvk.com", "userapi.com", "vk-apps.com", "vk-cdn.me", "vk-cdn.net", "vk-portal.net", "vk.cc", "vk.com", "vk.company",
-        "vk.design", "vk.link", "vk.me", "vk.team", "vkcache.com", "vkgo.app", "vklive.app", "vkmessenger.app", "vkmessenger.com", "vkuser.net",
-        "vkuseraudio.com", "vkuseraudio.net", "vkuserlive.net", "vkuservideo.com", "vkuservideo.net",
-        "yandex.aero", "yandex.az", "yandex.by", "yandex.co.il", "yandex.com", "yandex.com.am", "yandex.com.ge", "yandex.com.ru", "yandex.com.tr",
-        "yandex.com.ua", "yandex.de", "yandex.ee", "yandex.eu", "yandex.fi", "yandex.fr", "yandex.jobs", "yandex.kg", "yandex.kz", "yandex.lt",
-        "yandex.lv", "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj", "yandex.tm",
-        "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net"
-    }
-
-    # Проверка на соответствие домену или его поддомену
-    if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
-       or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource) \
-       or "xn--" in resource:
-        return f"\033[91m{resource}\033[0m"
-
-    return resource
 
 def get_region_and_asn(ip, city_reader, asn_reader):
     try:
@@ -90,12 +68,12 @@ def process_logs(logs, city_reader, asn_reader):
 
 def print_sorted_logs(data):
     clear_screen()
-    for email in sorted(data.keys(), key=extract_email_number):
-        print(f"Email: {highlight_email(email)}")
+    for email in sorted(data.keys()):
+        print(f"Email: {email}")
         for ip, info in sorted(data[email].items()):
-            print(f"  IP: {highlight_ip(ip)} ({info['region_asn']})")
+            print(f"  IP: {ip} ({info['region_asn']})")
             for resource, destination in sorted(info["resources"].items()):
-                print(f"    Resource: {highlight_resource(resource)} -> [{destination}]")
+                print(f"    Resource: {resource} -> [{destination}]")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -106,10 +84,7 @@ if __name__ == "__main__":
     user_input_path = input(f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): ").strip()
     log_file_path = user_input_path if user_input_path else default_log_file_path
 
-    if log_file_path == default_log_file_path:
-        print(f"Используется стандартный путь: {log_file_path}")
-    else:
-        print(f"Используется кастомный путь: {log_file_path}")
+    print(f"Используется путь: {log_file_path}")
 
     city_db_path = "/tmp/GeoLite2-City.mmdb"
     asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
@@ -119,10 +94,13 @@ if __name__ == "__main__":
     download_geoip_db(city_db_url, city_db_path)
     download_geoip_db(asn_db_url, asn_db_path)
     
-    clear_screen()  # Это место для очищения экрана, оставляем только здесь
+    clear_screen()
+    
+    encoding = detect_encoding(log_file_path)
+    print(f"Определена кодировка: {encoding}")
 
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
-        with open(log_file_path, "r") as file:
+        with open(log_file_path, "r", encoding=encoding) as file:
             logs = file.readlines()
         
         sorted_data = process_logs(logs, city_reader, asn_reader)
