@@ -44,16 +44,16 @@ def highlight_ip(ip):
     return f"\033[94m{ip}\033[0m"
 
 def highlight_resource(resource):
-    highlight_domains = re.compile(r"(" + "|".join([
-        r"mycdn\.me", r"mvk\.com", r"userapi\.com", r"vk-apps\.com", r"vk-cdn\.me", r"vk-cdn\.net", r"vk-portal\.net", r"vk\.cc", r"vk\.com", r"vk\.company",
-        r"vk\.design", r"vk\.link", r"vk\.me", r"vk\.team", r"vkcache\.com", r"vkgo\.app", r"vklive\.app", r"vkmessenger\.app", r"vkmessenger\.com", r"vkuser\.net",
-        r"vkuseraudio\.com", r"vkuseraudio\.net", r"vkuserlive\.net", r"vkuservideo\.com", r"vkuservideo\.net",
-        r"yandex\.aero", r"yandex\.az", r"yandex\.by", r"yandex\.co\.il", r"yandex\.com", r"yandex\.com\.am", r"yandex\.com\.ge", r"yandex\.com\.ru", r"yandex\.com\.tr",
-        r"yandex\.com\.ua", r"yandex\.de", r"yandex\.ee", r"yandex\.eu", r"yandex\.fi", r"yandex\.fr", r"yandex\.jobs", r"yandex\.kg", r"yandex\.kz", r"yandex\.lt",
-        r"yandex\.lv", r"yandex\.md", r"yandex\.net", r"yandex\.org", r"yandex\.pl", r"yandex\.ru", r"yandex\.st", r"yandex\.sx", r"yandex\.tj", r"yandex\.tm",
-        r"yandex\.ua", r"yandex\.uz", r"yandexcloud\.net", r"yastatic\.net"
-    ]) + r")(?:\.|$)")
-    if highlight_domains.search(resource) or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource):
+    highlight_domains = {
+        "mycdn.me", "mvk.com", "userapi.com", "vk-apps.com", "vk-cdn.me", "vk-cdn.net", "vk-portal.net", "vk.cc", "vk.com", "vk.company",
+        "vk.design", "vk.link", "vk.me", "vk.team", "vkcache.com", "vkgo.app", "vklive.app", "vkmessenger.app", "vkmessenger.com", "vkuser.net",
+        "vkuseraudio.com", "vkuseraudio.net", "vkuserlive.net", "vkuservideo.com", "vkuservideo.net",
+        "yandex.aero", "yandex.az", "yandex.by", "yandex.co.il", "yandex.com", "yandex.com.am", "yandex.com.ge", "yandex.com.ru", "yandex.com.tr",
+        "yandex.com.ua", "yandex.de", "yandex.ee", "yandex.eu", "yandex.fi", "yandex.fr", "yandex.jobs", "yandex.kg", "yandex.kz", "yandex.lt",
+        "yandex.lv", "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj", "yandex.tm",
+        "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net"
+    }
+    if resource in highlight_domains or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource):
         return f"\033[91m{resource}\033[0m"
     return resource
 
@@ -93,12 +93,19 @@ def print_sorted_logs(data):
                 print(f"    Resource: {highlight_resource(resource)} -> [{destination}]")
 
 if __name__ == "__main__":
-    clear_screen()
     parser = argparse.ArgumentParser()
     parser.add_argument("--summary", action="store_true", help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN")
     args = parser.parse_args()
-    
-    log_file_path = "/var/lib/marzban/access.log"
+
+    default_log_file_path = "/var/lib/marzban/access.log"
+    user_input_path = input(f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): ").strip()
+    log_file_path = user_input_path if user_input_path else default_log_file_path
+
+    if log_file_path == default_log_file_path:
+        print(f"Используется стандартный путь: {log_file_path}")
+    else:
+        print(f"Используется кастомный путь: {log_file_path}")
+
     city_db_path = "/tmp/GeoLite2-City.mmdb"
     asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
     city_db_url = "https://git.io/GeoLite2-City.mmdb"
@@ -107,6 +114,8 @@ if __name__ == "__main__":
     download_geoip_db(city_db_url, city_db_path)
     download_geoip_db(asn_db_url, asn_db_path)
     
+    clear_screen()  # Это место для очищения экрана, оставляем только здесь
+
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
         with open(log_file_path, "r") as file:
             logs = file.readlines()
