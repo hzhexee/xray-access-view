@@ -19,6 +19,12 @@
 
 ## Установка и использование
 
+### Установите python и geoip2
+```
+apt update 
+apt install python3
+apt install python3-geoip2
+```
 
 ### Запуск в основном режиме
 
