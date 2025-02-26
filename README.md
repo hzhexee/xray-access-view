@@ -27,16 +27,18 @@ apt install python3-geoip2
 ```
 
 ### Запуск в основном режиме
-
 ```bash
 python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
 ```
+![image](https://github.com/Davoyan/xray-access-view/blob/main/output.jpg?raw=true)
+
 
 ### Запуск в режиме сводки
-
 ```bash
 python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py) --summary
 ```
+![image](https://github.com/Davoyan/xray-access-view/blob/main/summary-output.jpg?raw=true)
+
 
 #### Доступ к логам
 По умолчанию используется путь '/var/lib/marzban/access.log', если вы хотите использовать свой путь, во время запуска скрипта следуйте следующему:
