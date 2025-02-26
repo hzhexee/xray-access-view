@@ -30,7 +30,9 @@ def parse_log_entry(log, filter_ip_resource=True):
         destination = match.group("destination")
         
         # Фильтрация по IP и ресурсу
-        if filter_ip_resource and re.match(r"^\d+\.\d+\.\d+\.\d+$", resource):
+        if filter_ip_resource and re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource):  # Проверка для IPv4
+            return None
+        if filter_ip_resource and re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):  # Проверка для IPv6
             return None
         
         # Убираем проверку по времени
