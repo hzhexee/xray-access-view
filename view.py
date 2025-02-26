@@ -16,7 +16,7 @@ def download_geoip_db(db_url, db_path):
     urllib.request.urlretrieve(db_url, db_path)
     print("\033[92mЗагрузка завершена.\033[0m")
 
-def parse_log_entry(log, filter_ip_resource=True):
+def parse_log_entry(log, filter_ip_resource):
     pattern = re.compile(
         r"(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d+) "
         r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+)):\d+ accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
@@ -84,22 +84,22 @@ def get_region_and_asn(ip, city_reader, asn_reader):
     
     return f"{country}, {region}, {asn}"
 
-def process_logs(logs, city_reader, asn_reader):
+def process_logs(logs, city_reader, asn_reader, filter_ip_resource):
     data = defaultdict(lambda: defaultdict(dict))
     for log in logs:
-        parsed = parse_log_entry(log, filter_ip_resource=True)
+        parsed = parse_log_entry(log, filter_ip_resource)
         if parsed:
             ip, email, resource, destination = parsed
             region_asn = get_region_and_asn(ip, city_reader, asn_reader)
             data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}})["resources"][resource] = destination
     return data
 
-def process_summary(logs, city_reader, asn_reader):
+def process_summary(logs, city_reader, asn_reader, filter_ip_resource):
     summary = defaultdict(set)
     regions = {}
     # Отключаем фильтрацию, чтобы отобразить все записи (даже если resource – IP)
     for log in logs:
-        parsed = parse_log_entry(log, filter_ip_resource=False)
+        parsed = parse_log_entry(log, filter_ip_resource)
         if parsed:
             ip, email, _, _ = parsed
             summary[email].add(ip)
@@ -126,6 +126,7 @@ def print_summary(summary):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--summary", action="store_true", help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN")
+    parser.add_argument("--ip", action="store_true", help="Вывести не только домены, но и ip")
     args = parser.parse_args()
 
     default_log_file_path = "/var/lib/marzban/access.log"
@@ -151,10 +152,15 @@ if __name__ == "__main__":
         with open(log_file_path, "r") as file:
             logs = file.readlines()
         
+        filter_ip_resource = True
+        if args.ip:
+            filter_ip_resource = False
+        
         if args.summary:
-            summary_data = process_summary(logs, city_reader, asn_reader)
+            filter_ip_resource = False
+            summary_data = process_summary(logs, city_reader, asn_reader, filter_ip_resource)
             print_summary(summary_data)
         else:
-            sorted_data = process_logs(logs, city_reader, asn_reader)
+            sorted_data = process_logs(logs, city_reader, asn_reader, filter_ip_resource)
             print_sorted_logs(sorted_data)
             
