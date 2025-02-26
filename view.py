@@ -94,6 +94,18 @@ def process_logs(logs, city_reader, asn_reader):
             data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}})["resources"][resource] = destination
     return data
 
+def process_summary(logs, city_reader, asn_reader):
+    summary = defaultdict(set)
+    regions = {}
+    # Отключаем фильтрацию, чтобы отобразить все записи (даже если resource – IP)
+    for log in logs:
+        parsed = parse_log_entry(log, filter_ip_resource=False)
+        if parsed:
+            ip, email, _, _ = parsed
+            summary[email].add(ip)
+            regions[ip] = get_region_and_asn(ip, city_reader, asn_reader)
+    return {email: (ips, regions) for email, ips in summary.items()}
+
 def print_sorted_logs(data):
     clear_screen()
     for email in sorted(data.keys(), key=extract_email_number):
@@ -102,6 +114,15 @@ def print_sorted_logs(data):
             print(f"  IP: {highlight_ip(ip)} ({info['region_asn']})")
             for resource, destination in sorted(info["resources"].items()):
                 print(f"    Resource: {highlight_resource(resource)} -> [{destination}]")
+
+def print_summary(summary):
+    for email in sorted(summary.keys(), key=extract_email_number):
+        ips, regions = summary[email]
+        email_colored = highlight_email(email)
+        unique_ips_colored = f"\033[93mUnique IPs: \033[1m{len(ips)}\033[0m"
+        print(f"Email: {email_colored}, {unique_ips_colored}")
+        for ip in sorted(ips):
+            print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -131,5 +152,10 @@ if __name__ == "__main__":
         with open(log_file_path, "r") as file:
             logs = file.readlines()
         
-        sorted_data = process_logs(logs, city_reader, asn_reader)
-        print_sorted_logs(sorted_data)
+        if args.summary:
+            summary_data = process_summary(logs, city_reader, asn_reader)
+            print_summary(summary_data)
+        else:
+            sorted_data = process_logs(logs, city_reader, asn_reader)
+            print_sorted_logs(sorted_data)
+            
