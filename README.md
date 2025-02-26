@@ -47,7 +47,7 @@ python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
 ```bash
 python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py) --online
 ```
-
+---
 #### Доступ к логам
 По умолчанию используется путь '/var/lib/marzban/access.log', если вы хотите использовать свой путь, во время запуска скрипта следуйте следующему:
 ```
