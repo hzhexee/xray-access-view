@@ -41,7 +41,7 @@ python3 <(curl -sL https://github.com/Davoyan/xray-acess-view/raw/main/view.py) 
 Укажите путь до логов (нажмите Enter для использования '/var/lib/marzban/access.log'): '/my/path/access.log'
 ```
 
-В конфигурации xray у вас должены быть прописаны access логи
+В конфигурации xray у вас должены быть прописаны access логи, пример:
 ```Пример
 "log": {
     "access": "/var/lib/marzban/access.log",
