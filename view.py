@@ -107,7 +107,6 @@ def process_summary(logs, city_reader, asn_reader):
     return {email: (ips, regions) for email, ips in summary.items()}
 
 def print_sorted_logs(data):
-    clear_screen()
     for email in sorted(data.keys(), key=extract_email_number):
         print(f"Email: {highlight_email(email)}")
         for ip, info in sorted(data[email].items()):
@@ -116,7 +115,6 @@ def print_sorted_logs(data):
                 print(f"    Resource: {highlight_resource(resource)} -> [{destination}]")
 
 def print_summary(summary):
-    clear_screen()
     for email in sorted(summary.keys(), key=extract_email_number):
         ips, regions = summary[email]
         email_colored = highlight_email(email)
