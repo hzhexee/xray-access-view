@@ -43,6 +43,10 @@ python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
 ```
 ![image](https://github.com/Davoyan/xray-access-view/blob/main/summary-output.jpg?raw=true)
 
+### Запуск в режиме сводки, с выводом только тех ip, что сейчас подключены к серверу
+```bash
+python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py) --online
+```
 
 #### Доступ к логам
 По умолчанию используется путь '/var/lib/marzban/access.log', если вы хотите использовать свой путь, во время запуска скрипта следуйте следующему:
