@@ -53,8 +53,13 @@ def highlight_resource(resource):
         "yandex.lv", "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj", "yandex.tm",
         "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net"
     }
-    if resource in highlight_domains or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource):
+
+    # Проверка на соответствие домену или его поддомену
+    if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
+       or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource) \
+       or "xn--" in resource:
         return f"\033[91m{resource}\033[0m"
+
     return resource
 
 def get_region_and_asn(ip, city_reader, asn_reader):
