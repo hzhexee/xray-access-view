@@ -18,7 +18,8 @@ def download_geoip_db(db_url, db_path):
 
 def parse_log_entry(log, filter_ip_resource=True):
     pattern = re.compile(
-        r"from (?P<ip>(?:tcp:|udp:)?([\d\.]+|[a-fA-F0-9:]+|[\w\.-]+)):\d+ accepted (?P<protocol>\w+):(?P<resource>[\w\.-]+):\d+ "
+        r"(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d+)"
+        r" from (?P<ip>(?:tcp:|udp:)?([\d\.]+|[a-fA-F0-9:]+|[\w\.-]+)):\d+ accepted (?P<protocol>\w+):(?P<resource>[\w\.-]+):\d+ "
         r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\] email: (?P<email>\S+)"
     )
     match = pattern.match(log)
