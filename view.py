@@ -141,10 +141,64 @@ def print_summary(summary):
         for ip in sorted(ips):
             print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
 
+def extract_ip_from_foreign(foreign):
+    m = re.match(r"^(\d+\.\d+\.\d+\.\d+):\d+$", foreign)
+    if m:
+        return m.group(1)
+    parts = foreign.rsplit(":", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return parts[0]
+    return foreign
+
+def process_online_mode(logs, city_reader, asn_reader):
+    # Формируем отображение: IP -> последний email (из логов)
+    ip_last_email = {}
+    for log in logs:
+        parsed = parse_log_entry(log, filter_ip_resource=False)
+        if parsed:
+            ip, email, _, _ = parsed
+            ip_last_email[ip] = email
+
+    # Получаем активные ESTABLISHED соединения через netstat
+    try:
+        netstat_output = os.popen("netstat -an | grep ESTABLISHED").read().strip().splitlines()
+    except Exception as e:
+        print(f"Ошибка при выполнении netstat: {e}")
+        return
+
+    active_ips = set()
+    for line in netstat_output:
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+        foreign_address = parts[4]
+        ip = extract_ip_from_foreign(foreign_address)
+        active_ips.add(ip)
+
+    # Оставляем только те IP, которые присутствуют в логах
+    relevant_ips = active_ips.intersection(ip_last_email.keys())
+
+    # Группируем IP по email
+    email_to_ips = defaultdict(list)
+    for ip in relevant_ips:
+        email = ip_last_email[ip]
+        email_to_ips[email].append(ip)
+
+    if email_to_ips:
+        print("\033[92mАктивные ESTABLISHED соединения (из логов) сгруппированные по email:\033[0m")
+        for email in sorted(email_to_ips.keys(), key=extract_email_number):
+            print(f"Email: {highlight_email(email)}")
+            for ip in sorted(email_to_ips[email]):
+                region_asn = get_region_and_asn(ip, city_reader, asn_reader)
+                print(f"  IP: {highlight_ip(ip)} ({region_asn})")
+    else:
+        print("Нет ESTABLISHED соединений, найденных в логах.")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--summary", action="store_true", help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN")
     parser.add_argument("--ip", action="store_true", help="Вывести не только домены, но и ip")
+    parser.add_argument("--online", action="store_true", help="Показать ESTABLISHED соединения (из логов) с последним email доступа")
     args = parser.parse_args()
 
     default_log_file_path = "/var/lib/marzban/access.log"
@@ -162,9 +216,7 @@ if __name__ == "__main__":
     asn_db_url = "https://git.io/GeoLite2-ASN.mmdb"
     
     download_geoip_db(city_db_url, city_db_path)
-    download_geoip_db(asn_db_url, asn_db_path)
-    
-
+    download_geoip_db(asn_db_url, asn_db_path)    
 
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
         with open(log_file_path, "r") as file:
@@ -174,7 +226,16 @@ if __name__ == "__main__":
         if args.ip:
             filter_ip_resource = False
         
-        clear_screen()  # Это место для очищения экрана, оставляем только здесь
+        clear_screen()
+            
+        # Если выбран режим online
+        if args.online:
+            with open(log_file_path, "r") as file:
+                logs = file.readlines()
+
+            with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
+                process_online_mode(logs, city_reader, asn_reader)
+            exit(0)    
             
         if args.summary:
             filter_ip_resource = False
