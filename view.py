@@ -18,7 +18,7 @@ def download_geoip_db(db_url, db_path):
 
 def parse_log_entry(log, filter_ip_resource):
     pattern = re.compile(
-        r"(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d+) "
+        r"(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
         r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+)):\d+ accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
         r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\] email: (?P<email>\S+)"
     )
@@ -41,7 +41,7 @@ def parse_log_entry(log, filter_ip_resource):
 
 def extract_email_number(email):
     match = re.match(r"(\d+)\..*", email)
-    return int(match.group(1)) if match else float('inf')
+    return int(match.group(1)) if match else email
 
 def highlight_email(email):
     return f"\033[92m{email}\033[0m"
