@@ -146,7 +146,7 @@ if __name__ == "__main__":
     download_geoip_db(city_db_url, city_db_path)
     download_geoip_db(asn_db_url, asn_db_path)
     
-    clear_screen()  # Это место для очищения экрана, оставляем только здесь
+
 
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
         with open(log_file_path, "r") as file:
@@ -156,6 +156,8 @@ if __name__ == "__main__":
         if args.ip:
             filter_ip_resource = False
         
+        clear_screen()  # Это место для очищения экрана, оставляем только здесь
+            
         if args.summary:
             filter_ip_resource = False
             summary_data = process_summary(logs, city_reader, asn_reader, filter_ip_resource)
