@@ -5,6 +5,9 @@ import geoip2.database
 import urllib.request
 from collections import defaultdict
 
+# Глобальный кэш для хранения результатов get_region_and_asn по IP
+region_asn_cache = {}
+
 def clear_screen():
     os.system('clear' if os.name == 'posix' else 'cls')
 
@@ -16,7 +19,7 @@ def download_geoip_db(db_url, db_path):
     urllib.request.urlretrieve(db_url, db_path)
     print("\033[92mЗагрузка завершена.\033[0m")
 
-def parse_log_entry(log, filter_ip_resource):
+def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
     pattern = re.compile(
         r".*?(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
         r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+)):\d+ accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
@@ -45,7 +48,6 @@ def parse_log_entry(log, filter_ip_resource):
                 else:
                     resource = f"{resource} ({country})"
         
-        # Убираем проверку по времени
         return ip, email, resource, destination
     return None
 
@@ -74,19 +76,19 @@ def highlight_resource(resource):
         "kaspersky-labs.com", "kaspersky.com"
     }
 
-    # Проверка на соответствие домену или его поддомену
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
        or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource) \
        or "xn--" in resource:
         return f"\033[91m{resource}\033[0m"
     
-    # Проверка на соответствие домену или его поддомену
     if any(resource == domain or resource.endswith("." + domain) for domain in questinable_domains):
         return f"\033[38;5;186m{resource}\033[0m"
 
     return resource
 
 def get_region_and_asn(ip, city_reader, asn_reader):
+    if ip in region_asn_cache:
+        return region_asn_cache[ip]
     try:
         city_response = city_reader.city(ip)
         country = city_response.country.name if city_response.country.name else "Unknown Country"
@@ -100,24 +102,25 @@ def get_region_and_asn(ip, city_reader, asn_reader):
     except Exception:
         asn = "Unknown ASN"
     
-    return f"{country}, {region}, {asn}"
+    result = f"{country}, {region}, {asn}"
+    region_asn_cache[ip] = result
+    return result
 
-def process_logs(logs, city_reader, asn_reader, filter_ip_resource):
+def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     data = defaultdict(lambda: defaultdict(dict))
-    for log in logs:
-        parsed = parse_log_entry(log, filter_ip_resource)
+    for log in logs_iterator:
+        parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
             ip, email, resource, destination = parsed
             region_asn = get_region_and_asn(ip, city_reader, asn_reader)
             data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}})["resources"][resource] = destination
     return data
 
-def process_summary(logs, city_reader, asn_reader, filter_ip_resource):
+def process_summary(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     summary = defaultdict(set)
     regions = {}
-    # Отключаем фильтрацию, чтобы отобразить все записи (даже если resource – IP)
-    for log in logs:
-        parsed = parse_log_entry(log, filter_ip_resource)
+    for log in logs_iterator:
+        parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
             ip, email, _, _ = parsed
             summary[email].add(ip)
@@ -150,16 +153,15 @@ def extract_ip_from_foreign(foreign):
         return parts[0]
     return foreign
 
-def process_online_mode(logs, city_reader, asn_reader):
+def process_online_mode(logs_iterator, city_reader, asn_reader):
     # Формируем отображение: IP -> последний email (из логов)
     ip_last_email = {}
-    for log in logs:
-        parsed = parse_log_entry(log, filter_ip_resource=False)
+    for log in logs_iterator:
+        parsed = parse_log_entry(log, filter_ip_resource=False, city_reader=city_reader, asn_reader=asn_reader)
         if parsed:
             ip, email, _, _ = parsed
             ip_last_email[ip] = email
 
-    # Получаем активные ESTABLISHED соединения через netstat
     try:
         netstat_output = os.popen("netstat -an | grep ESTABLISHED").read().strip().splitlines()
     except Exception as e:
@@ -175,10 +177,7 @@ def process_online_mode(logs, city_reader, asn_reader):
         ip = extract_ip_from_foreign(foreign_address)
         active_ips.add(ip)
 
-    # Оставляем только те IP, которые присутствуют в логах
     relevant_ips = active_ips.intersection(ip_last_email.keys())
-
-    # Группируем IP по email
     email_to_ips = defaultdict(list)
     for ip in relevant_ips:
         email = ip_last_email[ip]
@@ -219,30 +218,23 @@ if __name__ == "__main__":
     download_geoip_db(asn_db_url, asn_db_path)    
 
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
-        with open(log_file_path, "r") as file:
-            logs = file.readlines()
-        
         filter_ip_resource = True
         if args.ip:
             filter_ip_resource = False
-        
         clear_screen()
-            
-        # Если выбран режим online
+        
         if args.online:
             filter_ip_resource = False
             with open(log_file_path, "r") as file:
-                logs = file.readlines()
-
-            with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
-                process_online_mode(logs, city_reader, asn_reader)
-            exit(0)    
+                process_online_mode(file, city_reader, asn_reader)
+            exit(0)
             
         if args.summary:
             filter_ip_resource = False
-            summary_data = process_summary(logs, city_reader, asn_reader, filter_ip_resource)
+            with open(log_file_path, "r") as file:
+                summary_data = process_summary(file, city_reader, asn_reader, filter_ip_resource)
             print_summary(summary_data)
         else:
-            sorted_data = process_logs(logs, city_reader, asn_reader, filter_ip_resource)
+            with open(log_file_path, "r") as file:
+                sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
             print_sorted_logs(sorted_data)
-            
