@@ -43,6 +43,20 @@ def style_text(text: str, style: TextStyle) -> str:
     return f"\033[{style.value}m{text}\033[{TextStyle.RESET.value}m"
 
 
+def get_log_file_path() -> str:
+    default_log_file_path = "/var/lib/marzban/access.log"
+    while True:
+        user_input_path = input(
+            f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): "
+        ).strip()
+        log_file_path = user_input_path or default_log_file_path
+
+        if os.path.exists(log_file_path):
+            return user_input_path
+
+        print(f"Ошибка: файл по пути '{log_file_path}' не существует.")
+
+
 def clear_screen():
     os.system('clear' if os.name == 'posix' else 'cls')
 
@@ -249,16 +263,7 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
 
 
 def main(arguments: Namespace):
-    default_log_file_path = "/var/lib/marzban/access.log"
-    user_input_path = input(
-        f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): "
-    ).strip()
-    log_file_path = user_input_path or default_log_file_path
-
-    if log_file_path == default_log_file_path:
-        print(f"Используется стандартный путь: {log_file_path}")
-    else:
-        print(f"Используется кастомный путь: {log_file_path}")
+    log_file_path = get_log_file_path()
 
     city_db_path = "/tmp/GeoLite2-City.mmdb"
     asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
@@ -272,6 +277,7 @@ def main(arguments: Namespace):
         filter_ip_resource = True
         if arguments.ip:
             filter_ip_resource = False
+
         clear_screen()
 
         if arguments.online:
