@@ -30,7 +30,7 @@ apt install python3-geoip2
 ```bash
 python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
 ```
-![image](https://github.com/Davoyan/xray-access-view/blob/main/output.jpg?raw=true)
+![image](static/output.jpg)
 
 ### Запуск в основном режиме с выводом не только доменов, но и ip
 ```bash
@@ -41,7 +41,7 @@ python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
 ```bash
 python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py) --summary
 ```
-![image](https://github.com/Davoyan/xray-access-view/blob/main/summary-output.jpg?raw=true)
+![image](static/summary-output.jpg)
 
 ### Запуск в режиме сводки, с выводом только тех ip, что сейчас подключены к серверу
 ```bash
