@@ -97,18 +97,22 @@ def highlight_resource(resource):
 def get_region_and_asn(ip, city_reader, asn_reader):
     if ip in region_asn_cache:
         return region_asn_cache[ip]
+
+    unknown_country = "Unknown Country"
+    unknown_region = "Unknown Region"
     try:
         city_response = city_reader.city(ip)
-        country = city_response.country.name if city_response.country.name else "Unknown Country"
-        region = city_response.subdivisions.most_specific.name if city_response.subdivisions.most_specific.name else "Unknown Region"
+        country = city_response.country.name or unknown_country
+        region = city_response.subdivisions.most_specific.name or unknown_region
     except Exception:
-        country, region = "Unknown Country", "Unknown Region"
+        country, region = unknown_country, unknown_region
 
+    unknown_asn = "Unknown ASN"
     try:
         asn_response = asn_reader.asn(ip)
         asn = f"AS{asn_response.autonomous_system_number} {asn_response.autonomous_system_organization}"
     except Exception:
-        asn = "Unknown ASN"
+        asn = unknown_asn
 
     result = f"{country}, {region}, {asn}"
     region_asn_cache[ip] = result
