@@ -52,7 +52,7 @@ def get_log_file_path() -> str:
         log_file_path = user_input_path or default_log_file_path
 
         if os.path.exists(log_file_path):
-            return user_input_path
+            return log_file_path
 
         print(f"Ошибка: файл по пути '{log_file_path}' не существует.")
 
