@@ -3,10 +3,43 @@ import os
 import re
 import urllib.request
 from collections import defaultdict
+from enum import Enum
 
 import geoip2.database
 
 region_asn_cache = {}
+
+
+class TextStyle(Enum):
+    RESET = 0
+    BOLD = 1
+
+
+class TextColor(Enum):
+    BLACK = 30
+    RED = 31
+    GREEN = 32
+    YELLOW = 33
+    BLUE = 34
+    MAGENTA = 35
+    CYAN = 36
+    WHITE = 37
+    BRIGHT_BLACK = 90
+    BRIGHT_RED = 91
+    BRIGHT_GREEN = 92
+    BRIGHT_YELLOW = 93
+    BRIGHT_BLUE = 94
+    BRIGHT_MAGENTA = 95
+    BRIGHT_CYAN = 96
+    BRIGHT_WHITE = 97
+
+
+def color_text(text: str, color: TextColor) -> str:
+    return f"\033[{color.value}m{text}\033[{TextStyle.RESET.value}m"
+
+
+def style_text(text: str, style: TextStyle) -> str:
+    return f"\033[{style.value}m{text}\033[{TextStyle.RESET.value}m"
 
 
 def clear_screen():
@@ -15,11 +48,11 @@ def clear_screen():
 
 def download_geoip_db(db_url, db_path):
     if os.path.exists(db_path):
-        print(f"\033[93mУдаление старой базы данных:\033[0m {db_path}")
+        print(f"{color_text("Удаление старой базы данных:", TextColor.BRIGHT_YELLOW)} {db_path}")
         os.remove(db_path)
-    print(f"\033[92mСкачивание базы данных из\033[0m {db_url}...")
+    print(color_text(f"Скачивание базы данных из {db_url}...", TextColor.BRIGHT_GREEN))
     urllib.request.urlretrieve(db_url, db_path)
-    print("\033[92mЗагрузка завершена.\033[0m")
+    print(color_text("Загрузка завершена.", TextColor.BRIGHT_GREEN))
 
 
 def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
@@ -46,7 +79,7 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
                 region_asn = get_region_and_asn(resource, city_reader, asn_reader)
                 country = region_asn.split(",")[0]
                 if country in {"Russia", "Belarus"}:
-                    resource = f"\033[91m{resource} ({country})\033[0m"
+                    resource = color_text(f"{resource} ({country})", TextColor.BRIGHT_RED)
                 else:
                     resource = f"{resource} ({country})"
 
@@ -60,11 +93,11 @@ def extract_email_number(email):
 
 
 def highlight_email(email):
-    return f"\033[92m{email}\033[0m"
+    return color_text(email, TextColor.BRIGHT_GREEN)
 
 
 def highlight_ip(ip):
-    return f"\033[94m{ip}\033[0m"
+    return color_text(ip, TextColor.BLUE)
 
 
 def highlight_resource(resource):
@@ -86,10 +119,10 @@ def highlight_resource(resource):
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
             or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource) \
             or "xn--" in resource:
-        return f"\033[91m{resource}\033[0m"
+        return color_text(resource, TextColor.RED)
 
     if any(resource == domain or resource.endswith("." + domain) for domain in questinable_domains):
-        return f"\033[38;5;186m{resource}\033[0m"
+        return color_text(resource, TextColor.YELLOW)
 
     return resource
 
@@ -155,7 +188,8 @@ def print_summary(summary):
     for email in sorted(summary.keys(), key=extract_email_number):
         ips, regions = summary[email]
         email_colored = highlight_email(email)
-        unique_ips_colored = f"\033[93mUnique IPs: \033[1m{len(ips)}\033[0m"
+        unique_ips_colored = (f"{color_text("Unique IPs:", TextColor.BRIGHT_YELLOW)} "
+                              f"{style_text(f"{len(ips)}", TextStyle.BOLD)}")
         print(f"Email: {email_colored}, {unique_ips_colored}")
         for ip in sorted(ips):
             print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
@@ -201,7 +235,9 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
         email_to_ips[email].append(ip)
 
     if email_to_ips:
-        print("\033[92mАктивные ESTABLISHED соединения (из логов) сгруппированные по email:\033[0m")
+        print(
+            color_text("Активные ESTABLISHED соединения (из логов) сгруппированные по email:", TextColor.BRIGHT_GREEN)
+        )
         for email in sorted(email_to_ips.keys(), key=extract_email_number):
             print(f"Email: {highlight_email(email)}")
             for ip in sorted(email_to_ips[email]):
