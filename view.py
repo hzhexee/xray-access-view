@@ -204,8 +204,7 @@ def print_summary(summary):
     for email in sorted(summary.keys(), key=extract_email_number):
         ips, regions = summary[email]
         email_colored = highlight_email(email)
-        unique_ips_colored = (f"{color_text("Unique IPs:", TextColor.BRIGHT_YELLOW)} "
-                               f"{style_text(f"{len(ips)}", TextStyle.BOLD)}")
+        unique_ips_colored = f"{color_text('Unique IPs:', TextColor.BRIGHT_YELLOW)} {style_text(str(len(ips)), TextStyle.BOLD)}"
         print(f"Email: {email_colored}, {unique_ips_colored}")
         for ip in sorted(ips):
             print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
