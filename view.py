@@ -65,7 +65,8 @@ def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     if os.path.exists(db_path):
         if without_update:
             return
-        print(f"{color_text("Удаление старой базы данных:", TextColor.BRIGHT_YELLOW)} {db_path}")
+        print(f"Path: {db_path}")
+        print(f"{color_text('Удаление старой базы данных:', TextColor.BRIGHT_YELLOW)} {db_path}")
         os.remove(db_path)
     print(color_text(f"Скачивание базы данных из {db_url}...", TextColor.BRIGHT_GREEN))
     urllib.request.urlretrieve(db_url, db_path)
