@@ -61,8 +61,10 @@ def clear_screen():
     os.system('clear' if os.name == 'posix' else 'cls')
 
 
-def download_geoip_db(db_url, db_path):
+def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     if os.path.exists(db_path):
+        if without_update:
+            return
         print(f"{color_text("Удаление старой базы данных:", TextColor.BRIGHT_YELLOW)} {db_path}")
         os.remove(db_path)
     print(color_text(f"Скачивание базы данных из {db_url}...", TextColor.BRIGHT_GREEN))
@@ -270,8 +272,8 @@ def main(arguments: Namespace):
     city_db_url = "https://git.io/GeoLite2-City.mmdb"
     asn_db_url = "https://git.io/GeoLite2-ASN.mmdb"
 
-    download_geoip_db(city_db_url, city_db_path)
-    download_geoip_db(asn_db_url, asn_db_path)
+    download_geoip_db(city_db_url, city_db_path, arguments.without_geolite_update)
+    download_geoip_db(asn_db_url, asn_db_path, arguments.without_geolite_update)
 
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
         filter_ip_resource = True
@@ -312,6 +314,11 @@ if __name__ == "__main__":
         "--online",
         action="store_true",
         help="Показать ESTABLISHED соединения (из логов) с последним email доступа"
+    )
+    parser.add_argument(
+        "-wgu", "--without-geolite-update",
+        action="store_true",
+        help="Не обновлять базы данных GeoLite в случае, если они существуют"
     )
     args = parser.parse_args()
     try:
