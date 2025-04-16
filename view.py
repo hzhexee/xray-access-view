@@ -314,4 +314,7 @@ if __name__ == "__main__":
         help="Показать ESTABLISHED соединения (из логов) с последним email доступа"
     )
     args = parser.parse_args()
-    main(args)
+    try:
+        main(args)
+    except KeyboardInterrupt:
+        pass
