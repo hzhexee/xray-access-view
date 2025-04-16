@@ -213,17 +213,27 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--summary", action="store_true",
-                        help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN")
-    parser.add_argument("--ip", action="store_true", help="Вывести не только домены, но и ip")
-    parser.add_argument("--online", action="store_true",
-                        help="Показать ESTABLISHED соединения (из логов) с последним email доступа")
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN"
+    )
+    parser.add_argument(
+        "--ip",
+        action="store_true",
+        help="Вывести не только домены, но и ip")
+    parser.add_argument(
+        "--online",
+        action="store_true",
+        help="Показать ESTABLISHED соединения (из логов) с последним email доступа"
+    )
     args = parser.parse_args()
 
     default_log_file_path = "/var/lib/marzban/access.log"
     user_input_path = input(
-        f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): ").strip()
-    log_file_path = user_input_path if user_input_path else default_log_file_path
+        f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): "
+    ).strip()
+    log_file_path = user_input_path or default_log_file_path
 
     if log_file_path == default_log_file_path:
         print(f"Используется стандартный путь: {log_file_path}")
