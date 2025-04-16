@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import urllib.request
+from argparse import Namespace
 from collections import defaultdict
 from enum import Enum
 
@@ -247,24 +248,7 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
         print("Нет ESTABLISHED соединений, найденных в логах.")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--summary",
-        action="store_true",
-        help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN"
-    )
-    parser.add_argument(
-        "--ip",
-        action="store_true",
-        help="Вывести не только домены, но и ip")
-    parser.add_argument(
-        "--online",
-        action="store_true",
-        help="Показать ESTABLISHED соединения (из логов) с последним email доступа"
-    )
-    args = parser.parse_args()
-
+def main(arguments: Namespace):
     default_log_file_path = "/var/lib/marzban/access.log"
     user_input_path = input(
         f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): "
@@ -286,17 +270,17 @@ if __name__ == "__main__":
 
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
         filter_ip_resource = True
-        if args.ip:
+        if arguments.ip:
             filter_ip_resource = False
         clear_screen()
 
-        if args.online:
+        if arguments.online:
             filter_ip_resource = False
             with open(log_file_path, "r") as file:
                 process_online_mode(file, city_reader, asn_reader)
             exit(0)
 
-        if args.summary:
+        if arguments.summary:
             filter_ip_resource = False
             with open(log_file_path, "r") as file:
                 summary_data = process_summary(file, city_reader, asn_reader, filter_ip_resource)
@@ -305,3 +289,23 @@ if __name__ == "__main__":
             with open(log_file_path, "r") as file:
                 sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
             print_sorted_logs(sorted_data)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN"
+    )
+    parser.add_argument(
+        "--ip",
+        action="store_true",
+        help="Вывести не только домены, но и ip")
+    parser.add_argument(
+        "--online",
+        action="store_true",
+        help="Показать ESTABLISHED соединения (из логов) с последним email доступа"
+    )
+    args = parser.parse_args()
+    main(args)
