@@ -25,7 +25,7 @@ apt update
 apt install python3
 apt install python3-geoip2
 ```
-
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ### Запуск в основном режиме
 ```bash
 python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
