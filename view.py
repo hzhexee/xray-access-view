@@ -283,7 +283,6 @@ def main(arguments: Namespace):
         clear_screen()
 
         if arguments.online:
-            filter_ip_resource = False
             with open(log_file_path, "r") as file:
                 process_online_mode(file, city_reader, asn_reader)
             exit(0)
