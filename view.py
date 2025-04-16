@@ -65,8 +65,7 @@ def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     if os.path.exists(db_path):
         if without_update:
             return
-        print(f"Path: {db_path}")
-        print(f"{color_text('Удаление старой базы данных:', TextColor.BRIGHT_YELLOW)} {db_path}")
+        print(f"{color_text("Удаление старой базы данных:", TextColor.BRIGHT_YELLOW)} {db_path}")
         os.remove(db_path)
     print(color_text(f"Скачивание базы данных из {db_url}...", TextColor.BRIGHT_GREEN))
     urllib.request.urlretrieve(db_url, db_path)
@@ -206,8 +205,8 @@ def print_summary(summary):
     for email in sorted(summary.keys(), key=extract_email_number):
         ips, regions = summary[email]
         email_colored = highlight_email(email)
-        colored_text = color_text("Unique IPs:", TextColor.BRIGHT_YELLOW)
-        unique_ips_colored = f"{colored_text}"
+        unique_ips_colored = (f"{color_text("Unique IPs:", TextColor.BRIGHT_YELLOW)} "
+                              f"{style_text(f"{len(ips)}", TextStyle.BOLD)}")
         print(f"Email: {email_colored}, {unique_ips_colored}")
         for ip in sorted(ips):
             print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
