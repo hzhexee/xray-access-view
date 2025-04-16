@@ -36,13 +36,13 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
         resource = match.group("resource")
         destination = match.group("destination")
 
+        ipv4_pattern = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
+        ipv6_pattern = re.compile(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
         if filter_ip_resource:
-            if re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource) or \
-                    re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):
+            if ipv4_pattern.match(resource) or ipv6_pattern.match(resource):
                 return None
         else:
-            if re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource) or \
-                    re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):
+            if ipv4_pattern.match(resource) or ipv6_pattern.match(resource):
                 region_asn = get_region_and_asn(resource, city_reader, asn_reader)
                 country = region_asn.split(",")[0]
                 if country in {"Russia", "Belarus"}:
