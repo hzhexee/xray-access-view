@@ -131,11 +131,11 @@ def highlight_resource(resource):
         "yandex.eu", "yandex.fi", "yandex.fr", "yandex.jobs", "yandex.kg", "yandex.kz", "yandex.lt", "yandex.lv",
         "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj",
         "yandex.tm", "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net", "dodois.com", "dodois.io", "ekatox-ru.com",
-        "jivosite.com", "showip.net"
+        "jivosite.com", "showip.net", "kaspersky-labs.com", "kaspersky.com"
     }
 
     questinable_domains = {
-        "kaspersky-labs.com", "kaspersky.com", "alicdn.com", "xiaomi.net", "mi.com"
+        "alicdn.com", "xiaomi.net", "mi.com", "miui.com"
     }
 
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
@@ -143,7 +143,8 @@ def highlight_resource(resource):
             or "xn--" in resource:
         return color_text(resource, TextColor.RED)
 
-    if any(resource == domain or resource.endswith("." + domain) for domain in questinable_domains):
+    if any(resource == domain or resource.endswith("." + domain) for domain in questinable_domains) \
+            or re.search(r"\.cn$|\.citic$|\.baidu$|\.sohu$|\.unicom$", resource):
         return color_text(resource, TextColor.YELLOW)
 
     return resource
