@@ -135,7 +135,7 @@ def highlight_resource(resource):
     }
 
     questinable_domains = {
-        "alicdn.com", "xiaomi.net", "mi.com", "miui.com"
+        "alicdn.com", "xiaomi.net", "xiaomi.com", "mi.com", "miui.com"
     }
 
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
