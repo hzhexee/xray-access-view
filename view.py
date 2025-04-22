@@ -73,16 +73,17 @@ def download_geoip_db(db_url: str, db_path: str, without_update: bool):
 
 
 def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
-
     pattern = re.compile(
         r".*?(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
-        r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+))?(?::\d+)? accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
-        r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\](?: email: (?P<email>\S+))?"
+        r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+|@|unix:@))?(?::\d+)? accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+(?:\.\w+)*|\d+\.\d+\.\d+\.\d+):\d+ "
+        r"\[(?P<destination>[^\]]+)\](?: email: (?P<email>\S+))?"
     )
 
     match = pattern.match(log)
     if match:
         ip = match.group("ip") or "Unknown IP"
+        if ip in {"@", "unix:@"}:
+            ip = "Unknown IP"
         email = match.group("email") or "Unknown Email"
         resource = match.group("resource")
         destination = match.group("destination")
@@ -218,6 +219,8 @@ def print_summary(summary):
 
 
 def extract_ip_from_foreign(foreign):
+    if foreign in {"@", "unix:@"}:
+        return "Unknown IP"
     m = re.match(r"^(\d+\.\d+\.\d+\.\d+):\d+$", foreign)
     if m:
         return m.group(1)
