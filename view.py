@@ -76,13 +76,13 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
     pattern = re.compile(
         r".*?(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
         r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+)):\d+ accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
-        r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\] email: (?P<email>\S+)"
+        r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\](?: email: (?P<email>\S+))?"
     )
 
     match = pattern.match(log)
     if match:
         ip = match.group("ip")
-        email = match.group("email")
+        email = match.group("email") or "Unknown Email"
         resource = match.group("resource")
         destination = match.group("destination")
 
