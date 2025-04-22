@@ -81,10 +81,10 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
 
     match = pattern.match(log)
     if match:
-        ip = match.group("ip")
+        ip = match.group("ip") or "Unknown IP"
         email = match.group("email") or "Unknown Email"
-        resource = match.group("resource")
-        destination = match.group("destination")
+        resource = match.group("resource") or "Unknown resource"
+        destination = match.group("destination") or "Unknown destination"
 
         ipv4_pattern = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
         ipv6_pattern = re.compile(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
