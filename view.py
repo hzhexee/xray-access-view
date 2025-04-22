@@ -1,23 +1,76 @@
-import re
-import os
 import argparse
-import geoip2.database
+import os
+import re
 import urllib.request
+from argparse import Namespace
 from collections import defaultdict
+from enum import Enum
 
-# Глобальный кэш для хранения результатов get_region_and_asn по IP
+import geoip2.database
+
 region_asn_cache = {}
+
+
+class TextStyle(Enum):
+    RESET = 0
+    BOLD = 1
+
+
+class TextColor(Enum):
+    BLACK = 30
+    RED = 31
+    GREEN = 32
+    YELLOW = 33
+    BLUE = 34
+    MAGENTA = 35
+    CYAN = 36
+    WHITE = 37
+    BRIGHT_BLACK = 90
+    BRIGHT_RED = 91
+    BRIGHT_GREEN = 92
+    BRIGHT_YELLOW = 93
+    BRIGHT_BLUE = 94
+    BRIGHT_MAGENTA = 95
+    BRIGHT_CYAN = 96
+    BRIGHT_WHITE = 97
+
+
+def color_text(text: str, color: TextColor) -> str:
+    return f"\033[{color.value}m{text}\033[{TextStyle.RESET.value}m"
+
+
+def style_text(text: str, style: TextStyle) -> str:
+    return f"\033[{style.value}m{text}\033[{TextStyle.RESET.value}m"
+
+
+def get_log_file_path() -> str:
+    default_log_file_path = "/var/lib/marzban/access.log"
+    while True:
+        user_input_path = input(
+            f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): "
+        ).strip()
+        log_file_path = user_input_path or default_log_file_path
+
+        if os.path.exists(log_file_path):
+            return log_file_path
+
+        print(f"Ошибка: файл по пути '{log_file_path}' не существует.")
+
 
 def clear_screen():
     os.system('clear' if os.name == 'posix' else 'cls')
 
-def download_geoip_db(db_url, db_path):
+
+def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     if os.path.exists(db_path):
-        print(f"\033[93mУдаление старой базы данных:\033[0m {db_path}")
+        if without_update:
+            return
+        print(f"{color_text('Удаление старой базы данных:', TextColor.BRIGHT_YELLOW)} {db_path}")
         os.remove(db_path)
-    print(f"\033[92mСкачивание базы данных из\033[0m {db_url}...")
+    print(color_text(f"Скачивание базы данных из {db_url}...", TextColor.BRIGHT_GREEN))
     urllib.request.urlretrieve(db_url, db_path)
-    print("\033[92mЗагрузка завершена.\033[0m")
+    print(color_text("Загрузка завершена.", TextColor.BRIGHT_GREEN))
+
 
 def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
     pattern = re.compile(
@@ -32,79 +85,89 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
         email = match.group("email")
         resource = match.group("resource")
         destination = match.group("destination")
-        
-        # Фильтрация по IP и ресурсу
+
+        ipv4_pattern = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
+        ipv6_pattern = re.compile(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
         if filter_ip_resource:
-            if re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource) or \
-               re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):
+            if ipv4_pattern.match(resource) or ipv6_pattern.match(resource):
                 return None
         else:
-            if re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", resource) or \
-               re.match(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$", resource):
+            if ipv4_pattern.match(resource) or ipv6_pattern.match(resource):
                 region_asn = get_region_and_asn(resource, city_reader, asn_reader)
-                country = region_asn.split(",")[0]  # Получаем страну из строки
+                country = region_asn.split(",")[0]
                 if country in {"Russia", "Belarus"}:
-                    resource = f"\033[91m{resource} ({country})\033[0m"  # Подсветка красным
+                    resource = color_text(f"{resource} ({country})", TextColor.BRIGHT_RED)
                 else:
                     resource = f"{resource} ({country})"
-        
+
         return ip, email, resource, destination
     return None
+
 
 def extract_email_number(email):
     match = re.match(r"(\d+)\..*", email)
     return int(match.group(1)) if match else email
 
+
 def highlight_email(email):
-    return f"\033[92m{email}\033[0m"
+    return color_text(email, TextColor.BRIGHT_GREEN)
+
 
 def highlight_ip(ip):
-    return f"\033[94m{ip}\033[0m"
+    return color_text(ip, TextColor.BLUE)
+
 
 def highlight_resource(resource):
     highlight_domains = {
-        "mycdn.me", "mvk.com", "userapi.com", "vk-apps.com", "vk-cdn.me", "vk-cdn.net", "vk-portal.net", "vk.cc", "vk.com", "vk.company",
-        "vk.design", "vk.link", "vk.me", "vk.team", "vkcache.com", "vkgo.app", "vklive.app", "vkmessenger.app", "vkmessenger.com", "vkuser.net",
-        "vkuseraudio.com", "vkuseraudio.net", "vkuserlive.net", "vkuservideo.com", "vkuservideo.net",
-        "yandex.aero", "yandex.az", "yandex.by", "yandex.co.il", "yandex.com", "yandex.com.am", "yandex.com.ge", "yandex.com.ru", "yandex.com.tr",
-        "yandex.com.ua", "yandex.de", "yandex.ee", "yandex.eu", "yandex.fi", "yandex.fr", "yandex.jobs", "yandex.kg", "yandex.kz", "yandex.lt",
-        "yandex.lv", "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj", "yandex.tm",
-        "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net"
+        "mycdn.me", "mvk.com", "userapi.com", "vk-apps.com", "vk-cdn.me", "vk-cdn.net", "vk-portal.net", "vk.cc",
+        "vk.com", "vk.company", "vk.design", "vk.link", "vk.me", "vk.team", "vkcache.com", "vkgo.app", "vklive.app",
+        "vkmessenger.app", "vkmessenger.com", "vkuser.net", "vkuseraudio.com", "vkuseraudio.net", "vkuserlive.net",
+        "vkuservideo.com", "vkuservideo.net", "yandex.aero", "yandex.az", "yandex.by", "yandex.co.il", "yandex.com",
+        "yandex.com.am", "yandex.com.ge", "yandex.com.ru", "yandex.com.tr", "yandex.com.ua", "yandex.de", "yandex.ee",
+        "yandex.eu", "yandex.fi", "yandex.fr", "yandex.jobs", "yandex.kg", "yandex.kz", "yandex.lt", "yandex.lv",
+        "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj",
+        "yandex.tm", "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net"
     }
-    
+
     questinable_domains = {
         "kaspersky-labs.com", "kaspersky.com"
     }
 
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
-       or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource) \
-       or "xn--" in resource:
-        return f"\033[91m{resource}\033[0m"
-    
+            or re.search(r"\.ru$|\.su$|\.by$|[а-яА-Я]", resource) \
+            or "xn--" in resource:
+        return color_text(resource, TextColor.RED)
+
     if any(resource == domain or resource.endswith("." + domain) for domain in questinable_domains):
-        return f"\033[38;5;186m{resource}\033[0m"
+        return color_text(resource, TextColor.YELLOW)
 
     return resource
+
 
 def get_region_and_asn(ip, city_reader, asn_reader):
     if ip in region_asn_cache:
         return region_asn_cache[ip]
+
+    unknown_country = "Unknown Country"
+    unknown_region = "Unknown Region"
     try:
         city_response = city_reader.city(ip)
-        country = city_response.country.name if city_response.country.name else "Unknown Country"
-        region = city_response.subdivisions.most_specific.name if city_response.subdivisions.most_specific.name else "Unknown Region"
+        country = city_response.country.name or unknown_country
+        region = city_response.subdivisions.most_specific.name or unknown_region
     except Exception:
-        country, region = "Unknown Country", "Unknown Region"
-    
+        country, region = unknown_country, unknown_region
+
+    unknown_asn = "Unknown ASN"
     try:
         asn_response = asn_reader.asn(ip)
         asn = f"AS{asn_response.autonomous_system_number} {asn_response.autonomous_system_organization}"
     except Exception:
-        asn = "Unknown ASN"
-    
+        asn = unknown_asn
+
     result = f"{country}, {region}, {asn}"
     region_asn_cache[ip] = result
     return result
+
 
 def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     data = defaultdict(lambda: defaultdict(dict))
@@ -115,6 +178,7 @@ def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
             region_asn = get_region_and_asn(ip, city_reader, asn_reader)
             data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}})["resources"][resource] = destination
     return data
+
 
 def process_summary(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     summary = defaultdict(set)
@@ -127,6 +191,7 @@ def process_summary(logs_iterator, city_reader, asn_reader, filter_ip_resource):
             regions[ip] = get_region_and_asn(ip, city_reader, asn_reader)
     return {email: (ips, regions) for email, ips in summary.items()}
 
+
 def print_sorted_logs(data):
     for email in sorted(data.keys(), key=extract_email_number):
         print(f"Email: {highlight_email(email)}")
@@ -135,14 +200,17 @@ def print_sorted_logs(data):
             for resource, destination in sorted(info["resources"].items()):
                 print(f"    Resource: {highlight_resource(resource)} -> [{destination}]")
 
+
 def print_summary(summary):
     for email in sorted(summary.keys(), key=extract_email_number):
         ips, regions = summary[email]
         email_colored = highlight_email(email)
-        unique_ips_colored = f"\033[93mUnique IPs: \033[1m{len(ips)}\033[0m"
+        unique_ips_colored = (f"{color_text('Unique IPs:', TextColor.BRIGHT_YELLOW)} "
+                      f"{style_text(f'{len(ips)}', TextStyle.BOLD)}")
         print(f"Email: {email_colored}, {unique_ips_colored}")
         for ip in sorted(ips):
             print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
+
 
 def extract_ip_from_foreign(foreign):
     m = re.match(r"^(\d+\.\d+\.\d+\.\d+):\d+$", foreign)
@@ -153,8 +221,8 @@ def extract_ip_from_foreign(foreign):
         return parts[0]
     return foreign
 
+
 def process_online_mode(logs_iterator, city_reader, asn_reader):
-    # Формируем отображение: IP -> последний email (из логов)
     ip_last_email = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource=False, city_reader=city_reader, asn_reader=asn_reader)
@@ -184,7 +252,9 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
         email_to_ips[email].append(ip)
 
     if email_to_ips:
-        print("\033[92mАктивные ESTABLISHED соединения (из логов) сгруппированные по email:\033[0m")
+        print(
+            color_text("Активные ESTABLISHED соединения (из логов) сгруппированные по email:", TextColor.BRIGHT_GREEN)
+        )
         for email in sorted(email_to_ips.keys(), key=extract_email_number):
             print(f"Email: {highlight_email(email)}")
             for ip in sorted(email_to_ips[email]):
@@ -193,43 +263,31 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
     else:
         print("Нет ESTABLISHED соединений, найденных в логах.")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--summary", action="store_true", help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN")
-    parser.add_argument("--ip", action="store_true", help="Вывести не только домены, но и ip")
-    parser.add_argument("--online", action="store_true", help="Показать ESTABLISHED соединения (из логов) с последним email доступа")
-    args = parser.parse_args()
 
-    default_log_file_path = "/var/lib/marzban/access.log"
-    user_input_path = input(f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): ").strip()
-    log_file_path = user_input_path if user_input_path else default_log_file_path
-
-    if log_file_path == default_log_file_path:
-        print(f"Используется стандартный путь: {log_file_path}")
-    else:
-        print(f"Используется кастомный путь: {log_file_path}")
+def main(arguments: Namespace):
+    log_file_path = get_log_file_path()
 
     city_db_path = "/tmp/GeoLite2-City.mmdb"
     asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
     city_db_url = "https://git.io/GeoLite2-City.mmdb"
     asn_db_url = "https://git.io/GeoLite2-ASN.mmdb"
-    
-    download_geoip_db(city_db_url, city_db_path)
-    download_geoip_db(asn_db_url, asn_db_path)    
+
+    download_geoip_db(city_db_url, city_db_path, arguments.without_geolite_update)
+    download_geoip_db(asn_db_url, asn_db_path, arguments.without_geolite_update)
 
     with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
         filter_ip_resource = True
-        if args.ip:
+        if arguments.ip:
             filter_ip_resource = False
+
         clear_screen()
-        
-        if args.online:
-            filter_ip_resource = False
+
+        if arguments.online:
             with open(log_file_path, "r") as file:
                 process_online_mode(file, city_reader, asn_reader)
             exit(0)
-            
-        if args.summary:
+
+        if arguments.summary:
             filter_ip_resource = False
             with open(log_file_path, "r") as file:
                 summary_data = process_summary(file, city_reader, asn_reader, filter_ip_resource)
@@ -238,3 +296,31 @@ if __name__ == "__main__":
             with open(log_file_path, "r") as file:
                 sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
             print_sorted_logs(sorted_data)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Вывести только email, количество уникальных IP и сами IP с регионами и ASN"
+    )
+    parser.add_argument(
+        "--ip",
+        action="store_true",
+        help="Вывести не только домены, но и ip")
+    parser.add_argument(
+        "--online",
+        action="store_true",
+        help="Показать ESTABLISHED соединения (из логов) с последним email доступа"
+    )
+    parser.add_argument(
+        "-wgu", "--without-geolite-update",
+        action="store_true",
+        help="Не обновлять базы данных GeoLite в случае, если они существуют"
+    )
+    args = parser.parse_args()
+    try:
+        main(args)
+    except KeyboardInterrupt:
+        pass
