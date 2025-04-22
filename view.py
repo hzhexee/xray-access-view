@@ -130,11 +130,12 @@ def highlight_resource(resource):
         "yandex.com.am", "yandex.com.ge", "yandex.com.ru", "yandex.com.tr", "yandex.com.ua", "yandex.de", "yandex.ee",
         "yandex.eu", "yandex.fi", "yandex.fr", "yandex.jobs", "yandex.kg", "yandex.kz", "yandex.lt", "yandex.lv",
         "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj",
-        "yandex.tm", "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net", "dodois.com", "dodois.io", "ekatox-ru.com"
+        "yandex.tm", "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net", "dodois.com", "dodois.io", "ekatox-ru.com",
+        "jivosite.com", "showip.net"
     }
 
     questinable_domains = {
-        "kaspersky-labs.com", "kaspersky.com"
+        "kaspersky-labs.com", "kaspersky.com", "alicdn.com", "xiaomi.net", "mi.com"
     }
 
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
