@@ -138,7 +138,7 @@ def highlight_resource(resource):
     }
 
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
-            or re.search(r"\.ru$|\.ru.com$||\.su$|\.by$|[а-яА-Я]", resource) \
+            or re.search(r"\.ru$|\.ru.com$|\.su$|\.by$|[а-яА-Я]", resource) \
             or "xn--" in resource:
         return color_text(resource, TextColor.RED)
 
