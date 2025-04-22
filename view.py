@@ -73,9 +73,10 @@ def download_geoip_db(db_url: str, db_path: str, without_update: bool):
 
 
 def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
+
     pattern = re.compile(
         r".*?(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
-        r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+)):\d+ accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
+        r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+))?(?::\d+)? accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+):\d+ "
         r"\[.*?\s*(?:->|>>)\s*(?P<destination>\S+)\](?: email: (?P<email>\S+))?"
     )
 
@@ -83,8 +84,8 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
     if match:
         ip = match.group("ip") or "Unknown IP"
         email = match.group("email") or "Unknown Email"
-        resource = match.group("resource") or "Unknown resource"
-        destination = match.group("destination") or "Unknown destination"
+        resource = match.group("resource")
+        destination = match.group("destination")
 
         ipv4_pattern = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
         ipv6_pattern = re.compile(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
@@ -105,6 +106,8 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
 
 
 def extract_email_number(email):
+    if email == "Unknown Email":
+        return float('inf')
     match = re.match(r"(\d+)\..*", email)
     return int(match.group(1)) if match else email
 
@@ -145,6 +148,8 @@ def highlight_resource(resource):
 
 
 def get_region_and_asn(ip, city_reader, asn_reader):
+    if ip == "Unknown IP":
+        return "Unknown Country, Unknown Region, Unknown ASN"
     if ip in region_asn_cache:
         return region_asn_cache[ip]
 
@@ -219,7 +224,7 @@ def extract_ip_from_foreign(foreign):
     parts = foreign.rsplit(":", 1)
     if len(parts) == 2 and parts[1].isdigit():
         return parts[0]
-    return foreign
+    return "Unknown IP"
 
 
 def process_online_mode(logs_iterator, city_reader, asn_reader):
