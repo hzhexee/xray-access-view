@@ -5,6 +5,7 @@ import urllib.request
 from argparse import Namespace
 from collections import defaultdict
 from enum import Enum
+from datetime import datetime
 
 import geoip2.database
 from rich.text import Text
@@ -65,15 +66,23 @@ def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     urllib.request.urlretrieve(db_url, db_path)
     print(color_text("Загрузка завершена.", TextColor.BRIGHT_GREEN))
 
+def format_date(date_str: str) -> str:
+    try:
+        dt = datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S.%f")
+    except ValueError:
+        dt = datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S")
+    return dt.strftime("%d.%m.%Y %H:%M:%S")
+
 def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
     pattern = re.compile(
-        r".*?(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
+        r".*?(?P<date>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
         r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+|@|unix:@))?(?::\d+)? accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+(?:\.\w+)*|\d+\.\d+\.\d+\.\d+):\d+ "
         r"\[(?P<destination>[^\]]+)\](?: email: (?P<email>\S+))?"
     )
     match = pattern.match(log)
     if match:
         ip = match.group("ip") or "Unknown IP"
+        date = match.group("date")
         if ip in {"@", "unix:@"}:
             ip = "Unknown IP"
         email = match.group("email") or "Unknown Email"
@@ -92,7 +101,7 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
                     resource = color_text(f"{resource} ({country})", TextColor.BRIGHT_RED)
                 else:
                     resource = f"{resource} ({country})"
-        return ip, email, resource, destination
+        return ip, email, resource, destination, date
     return None
 
 def extract_email_number(email):
@@ -112,7 +121,7 @@ def highlight_resource(resource):
         "mycdn.me", "mvk.com", "userapi.com", "vk-apps.com", "vk-cdn.me", "vk-cdn.net", "vk-portal.net", "vk.cc",
         "vk.com", "vk.company", "vk.design", "vk.link", "vk.me", "vk.team", "vkcache.com", "vkgo.app", "vklive.app",
         "vkmessenger.app", "vkmessenger.com", "vkuser.net", "vkuseraudio.com", "vkuseraudio.net", "vkuserlive.net",
-        "vkuservideo.com", "vkuservideo.net", "yandex.aero", "yandex az", "yandex.by", "yandex.co.il", "yandex.com",
+        "vkuservideo.com", "vkuservideo.net", "yandex.aero", "yandex.az", "yandex.by", "yandex.co.il", "yandex.com",
         "yandex.com.am", "yandex.com.ge", "yandex.com.ru", "yandex.com.tr", "yandex.com.ua", "yandex.de", "yandex.ee",
         "yandex.eu", "yandex.fi", "yandex.fr", "yandex.jobs", "yandex.kg", "yandex.kz", "yandex.lt", "yandex.lv",
         "yandex.md", "yandex.net", "yandex.org", "yandex.pl", "yandex.ru", "yandex.st", "yandex.sx", "yandex.tj",
@@ -156,24 +165,31 @@ def get_region_and_asn(ip, city_reader, asn_reader):
 
 def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     data = defaultdict(lambda: defaultdict(dict))
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
-            ip, email, resource, destination = parsed
+            ip, email, resource, destination, date = parsed
             region_asn = get_region_and_asn(ip, city_reader, asn_reader)
-            data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}})["resources"][resource] = destination
+            data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}, "last_seen": None})["resources"][resource] = destination
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+                data[email][ip]["last_seen"] = date
     return data
 
 def process_summary(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     summary = defaultdict(set)
     regions = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
-            ip, email, _, _ = parsed
+            ip, email, _, _, date = parsed
             summary[email].add(ip)
             regions[ip] = get_region_and_asn(ip, city_reader, asn_reader)
-    return {email: (ips, regions) for email, ips in summary.items()}
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+    return {email: (ips, regions, last_seen) for email, ips in summary.items()}
 
 def extract_ip_from_foreign(foreign):
     if foreign in {"@", "unix:@"}:
@@ -188,11 +204,14 @@ def extract_ip_from_foreign(foreign):
 
 def process_online_mode(logs_iterator, city_reader, asn_reader):
     ip_last_email = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource=False, city_reader=city_reader, asn_reader=asn_reader)
         if parsed:
-            ip, email, _, _ = parsed
+            ip, email, _, _, date = parsed
             ip_last_email[ip] = email
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
     try:
         netstat_output = os.popen("netstat -an | grep ESTABLISHED").read().strip().splitlines()
     except Exception as e:
@@ -219,7 +238,8 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
             print(f"Email: {highlight_email(email)}")
             for ip in sorted(email_to_ips[email]):
                 region_asn = get_region_and_asn(ip, city_reader, asn_reader)
-                print(f"  IP: {highlight_ip(ip)} ({region_asn})")
+                last_date = format_date(last_seen[ip])
+                print(f"  IP: {highlight_ip(ip)} ({region_asn}) (Last Online: {last_date})")
     else:
         print("Нет ESTABLISHED соединений, найденных в логах.")
 
@@ -234,7 +254,8 @@ class LogApp(App):
             email_text = Text("Email: ").append(highlight_email(email))
             email_node = tree.root.add(email_text)
             for ip, info in sorted(self.data[email].items()):
-                ip_text = Text("IP: ").append(highlight_ip(ip)).append(f" ({info['region_asn']})")
+                last_date = format_date(info["last_seen"])
+                ip_text = Text("IP: ").append(highlight_ip(ip)).append(f" ({info['region_asn']}) (Last Online: {last_date})")
                 ip_node = email_node.add(ip_text)
                 for resource, destination in sorted(info["resources"].items()):
                     resource_text = Text("Resource: ").append(highlight_resource(resource)).append(f" -> [{destination}]")
@@ -253,11 +274,12 @@ class SummaryApp(App):
     def on_mount(self):
         tree = Tree("Summary")
         for email in sorted(self.summary.keys(), key=extract_email_number):
-            ips, regions = self.summary[email]
+            ips, regions, last_seen = self.summary[email]
             email_text = Text("Email: ").append(highlight_email(email)).append(f", Unique IPs: {len(ips)}")
             email_node = tree.root.add(email_text)
             for ip in sorted(ips):
-                ip_text = Text("IP: ").append(highlight_ip(ip)).append(f" ({regions[ip]})")
+                last_date = format_date(last_seen[ip])
+                ip_text = Text("IP: ").append(highlight_ip(ip)).append(f" ({regions[ip]}) (Last Online: {last_date})")
                 email_node.add_leaf(ip_text)
         self.mount(tree)
 
