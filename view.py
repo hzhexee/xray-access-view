@@ -12,6 +12,7 @@ from rich.text import Text
 from textual.app import App
 from textual.widgets import Tree
 from textual import events
+from datetime import timedelta
 
 region_asn_cache = {}
 
@@ -250,43 +251,34 @@ class LogApp(App):
         self.data = data
 
     def on_mount(self):
+        now = datetime.now()
         tree = Tree("Logs (Click)")
         for email in sorted(self.data.keys(), key=extract_email_number):
-            email_text = Text("Email: ").append(highlight_email(email))
-            email_node = tree.root.add(email_text)
-            for ip, info in sorted(self.data[email].items()):
-                last_date = format_date(info["last_seen"])
-                ip_text = Text("IP: ").append(highlight_ip(ip)).append(f" ({info['region_asn']}) (Last Online: {last_date})")
-                ip_node = email_node.add(ip_text)
-                for resource, destination in sorted(info["resources"].items()):
-                    resource_text = Text("Resource: ").append(highlight_resource(resource)).append(f" -> [{destination}]")
-                    ip_node.add_leaf(resource_text)
+            ip_infos = self.data[email]
+            unique_ip_count = len(ip_infos)
+            active_ip_count = 0
+            for info in ip_infos.values():
+                last_seen_str = info["last_seen"].split('.', 1)[0]
+                last_seen_time = datetime.strptime(last_seen_str, "%Y/%m/%d %H:%M:%S")
+                if now - last_seen_time <= timedelta(days=1):
+                    active_ip_count += 1
+            email_node = tree.root.add(
+                Text("Email: ")
+                .append(highlight_email(email))
+                .append(f" | Unique IP's: {unique_ip_count} | In last 24h: {active_ip_count}")
+            )
+            ips_info = list(ip_infos.items())
+            ips_info.sort(key=lambda item: datetime.strptime(item[1]["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S"), reverse=True)
+            for ip, info in ips_info:
+                last_dt = datetime.strptime(info["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S")
+                last_str = last_dt.strftime("%d.%m.%Y %H:%M:%S")
+                ip_node = email_node.add(
+                    Text("IP: ").append(highlight_ip(ip))
+                    .append(f" ({info['region_asn']}) (Last Online: {last_str})")
+                )
+                for resource, dest in sorted(info["resources"].items()):
+                    ip_node.add_leaf(Text("Resource: ").append(highlight_resource(resource)).append(f" -> [{dest}]"))
         self.mount(tree)
-
-    def on_key(self, event: events.Key):
-        if event.key == "q":
-            self.exit()
-
-class SummaryApp(App):
-    def __init__(self, summary):
-        super().__init__()
-        self.summary = summary
-
-    def on_mount(self):
-        tree = Tree("Summary (Click)")
-        for email in sorted(self.summary.keys(), key=extract_email_number):
-            ips, regions, last_seen = self.summary[email]
-            email_text = Text("Email: ").append(highlight_email(email)).append(f", Unique IPs: {len(ips)}")
-            email_node = tree.root.add(email_text)
-            for ip in sorted(ips):
-                last_date = format_date(last_seen[ip])
-                ip_text = Text("IP: ").append(highlight_ip(ip)).append(f" ({regions[ip]}) (Last Online: {last_date})")
-                email_node.add_leaf(ip_text)
-        self.mount(tree)
-
-    def on_key(self, event: events.Key):
-        if event.key == "q":
-            self.exit()
 
 def main(arguments: Namespace):
     log_file_path = get_log_file_path()
@@ -306,17 +298,10 @@ def main(arguments: Namespace):
             with open(log_file_path, "r") as file:
                 process_online_mode(file, city_reader, asn_reader)
             exit(0)
-        if arguments.summary:
-            filter_ip_resource = False
-            with open(log_file_path, "r") as file:
-                summary_data = process_summary(file, city_reader, asn_reader, filter_ip_resource)
-            app = SummaryApp(summary_data)
-            app.run()
-        else:
-            with open(log_file_path, "r") as file:
-                sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
-            app = LogApp(sorted_data)
-            app.run()
+        with open(log_file_path, "r") as file:
+            sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
+        app = LogApp(sorted_data)
+        app.run()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
