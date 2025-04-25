@@ -67,6 +67,7 @@ def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     print(color_text("Загрузка завершена.", TextColor.BRIGHT_GREEN))
 
 def format_date(date_str: str) -> str:
+    # Handle both formats: with and without microseconds
     try:
         dt = datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S.%f")
     except ValueError:
@@ -249,7 +250,7 @@ class LogApp(App):
         self.data = data
 
     def on_mount(self):
-        tree = Tree("Logs")
+        tree = Tree("Logs (Click)")
         for email in sorted(self.data.keys(), key=extract_email_number):
             email_text = Text("Email: ").append(highlight_email(email))
             email_node = tree.root.add(email_text)
@@ -272,7 +273,7 @@ class SummaryApp(App):
         self.summary = summary
 
     def on_mount(self):
-        tree = Tree("Summary")
+        tree = Tree("Summary (Click)")
         for email in sorted(self.summary.keys(), key=extract_email_number):
             ips, regions, last_seen = self.summary[email]
             email_text = Text("Email: ").append(highlight_email(email)).append(f", Unique IPs: {len(ips)}")
