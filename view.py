@@ -284,8 +284,8 @@ def main(arguments: Namespace):
     log_file_path = get_log_file_path()
     city_db_path = "/tmp/GeoLite2-City.mmdb"
     asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
-    city_db_url = "https://git.io/GeoLite2-City.mmdb"
-    asn_db_url = "https://git.io/GeoLite2-ASN.mmdb"
+    city_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
+    asn_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
     download_geoip_db(city_db_url, city_db_path, arguments.without_geolite_update)
     download_geoip_db(asn_db_url, asn_db_path, arguments.without_geolite_update)
 
