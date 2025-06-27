@@ -61,8 +61,6 @@ def style_text(text: str, style: TextStyle) -> str:
     return f"\033[{style.value}m{text}\033[{TextStyle.RESET.value}m"
 
 
-
-
 def get_panel_type() -> PanelType:
     """Запросить тип панели у пользователя"""
     while True:
@@ -82,7 +80,7 @@ def get_panel_type() -> PanelType:
 
 def setup_remnawave_logs() -> str:
     """Настроить логи для Remnawave и вернуть путь к файлу логов"""
-    logs_dir = "/opt/logs/"
+    logs_dir = "/var/remnalogs/"
     access_log_path = os.path.join(logs_dir, "access.log")
     
     # Проверить наличие Docker
@@ -420,5 +418,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         main(args)
+    except KeyboardInterrupt:
+        pass
     except KeyboardInterrupt:
         pass
