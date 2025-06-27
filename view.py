@@ -420,5 +420,3 @@ if __name__ == "__main__":
         main(args)
     except KeyboardInterrupt:
         pass
-    except KeyboardInterrupt:
-        pass
