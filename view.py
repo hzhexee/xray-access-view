@@ -80,7 +80,7 @@ def get_panel_type() -> PanelType:
 
 def setup_remnawave_logs() -> str:
     """Настроить логи для Remnawave и вернуть путь к файлу логов"""
-    logs_dir = "/var/remnalogs/"
+    logs_dir = "/var/log/remnalogs/"
     access_log_path = os.path.join(logs_dir, "access.log")
     
     # Проверить наличие Docker
