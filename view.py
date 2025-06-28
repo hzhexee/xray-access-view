@@ -7,8 +7,14 @@ from argparse import Namespace
 from collections import defaultdict
 from enum import Enum
 from typing import Optional, Tuple, Dict, Set
+from datetime import datetime
 
 import geoip2.database
+from rich.text import Text
+from textual.app import App
+from textual.widgets import Tree
+from textual import events
+from datetime import timedelta
 
 region_asn_cache = {}
 
@@ -33,7 +39,6 @@ class TextStyle(Enum):
     RESET = 0
     BOLD = 1
 
-
 class TextColor(Enum):
     BLACK = 30
     RED = 31
@@ -48,14 +53,11 @@ class TextColor(Enum):
     BRIGHT_GREEN = 92
     BRIGHT_YELLOW = 93
     BRIGHT_BLUE = 94
-    BRIGHT_MAGENTA = 95
     BRIGHT_CYAN = 96
     BRIGHT_WHITE = 97
 
-
 def color_text(text: str, color: TextColor) -> str:
     return f"\033[{color.value}m{text}\033[{TextStyle.RESET.value}m"
-
 
 def style_text(text: str, style: TextStyle) -> str:
     return f"\033[{style.value}m{text}\033[{TextStyle.RESET.value}m"
@@ -132,16 +134,12 @@ def get_log_file_path(panel_type: PanelType) -> str:
             f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): "
         ).strip()
         log_file_path = user_input_path or default_log_file_path
-
         if os.path.exists(log_file_path):
             return log_file_path
-
         print(f"Ошибка: файл по пути '{log_file_path}' не существует.")
-
 
 def clear_screen():
     os.system('clear' if os.name == 'posix' else 'cls')
-
 
 def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     if os.path.exists(db_path):
@@ -153,12 +151,20 @@ def download_geoip_db(db_url: str, db_path: str, without_update: bool):
     urllib.request.urlretrieve(db_url, db_path)
     print(color_text("Загрузка завершена.", TextColor.BRIGHT_GREEN))
 
+def format_date(date_str: str) -> str:
+    # Handle both formats: with and without microseconds
+    try:
+        dt = datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S.%f")
+    except ValueError:
+        dt = datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S")
+    return dt.strftime("%d.%m.%Y %H:%M:%S")
 
-def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader) -> Optional[Tuple[str, str, str, str]]:
+def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader) -> Optional[Tuple[str, str, str, str, str]]:
     match = LOG_PATTERN.match(log)
     if not match:
         return None
     
+    date = match.group(1)  # Extract the date from the first capture group
     ip = match.group("ip") or "Unknown IP"
     if ip in {"@", "unix:@"}:
         ip = "Unknown IP"
@@ -177,9 +183,8 @@ def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader) -> Optiona
                 resource = color_text(f"{resource} ({country})", TextColor.BRIGHT_RED)
             else:
                 resource = f"{resource} ({country})"
-
+    return ip, email, resource, destination, date
     return ip, email, resource, destination
-
 
 def extract_email_number(email):
     if email == "Unknown Email":
@@ -187,14 +192,11 @@ def extract_email_number(email):
     match = EMAIL_NUMBER_PATTERN.match(email)
     return int(match.group(1)) if match else email
 
-
 def highlight_email(email):
-    return color_text(email, TextColor.BRIGHT_GREEN)
-
+    return Text(email, style="bold green")
 
 def highlight_ip(ip):
-    return color_text(ip, TextColor.BLUE)
-
+    return Text(ip, style="blue")
 
 def highlight_resource(resource):
     highlight_domains = {
@@ -208,29 +210,23 @@ def highlight_resource(resource):
         "yandex.tm", "yandex.ua", "yandex.uz", "yandexcloud.net", "yastatic.net", "dodois.com", "dodois.io", "ekatox-ru.com",
         "jivosite.com", "showip.net", "kaspersky-labs.com", "kaspersky.com"
     }
-
     questinable_domains = {
         "alicdn.com", "xiaomi.net", "xiaomi.com", "mi.com", "miui.com"
     }
-
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
             or re.search(r"\.ru$|\.ru.com$|\.su$|\.by$|[а-яА-Я]", resource) \
             or "xn--" in resource:
-        return color_text(resource, TextColor.RED)
-
+        return Text(resource, style="red")
     if any(resource == domain or resource.endswith("." + domain) for domain in questinable_domains) \
             or re.search(r"\.cn$|\.citic$|\.baidu$|\.sohu$|\.unicom$", resource):
-        return color_text(resource, TextColor.YELLOW)
-
-    return resource
-
+        return Text(resource, style="yellow")
+    return Text(resource)
 
 def get_region_and_asn(ip, city_reader, asn_reader):
     if ip == "Unknown IP":
         return "Unknown Country, Unknown Region, Unknown ASN"
     if ip in region_asn_cache:
         return region_asn_cache[ip]
-
     unknown_country = "Unknown Country"
     unknown_region = "Unknown Region"
     try:
@@ -239,41 +235,43 @@ def get_region_and_asn(ip, city_reader, asn_reader):
         region = city_response.subdivisions.most_specific.name or unknown_region
     except Exception:
         country, region = unknown_country, unknown_region
-
     unknown_asn = "Unknown ASN"
     try:
         asn_response = asn_reader.asn(ip)
         asn = f"AS{asn_response.autonomous_system_number} {asn_response.autonomous_system_organization}"
     except Exception:
         asn = unknown_asn
-
     result = f"{country}, {region}, {asn}"
     region_asn_cache[ip] = result
     return result
 
-
 def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     data = defaultdict(lambda: defaultdict(dict))
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
-            ip, email, resource, destination = parsed
+            ip, email, resource, destination, date = parsed
             region_asn = get_region_and_asn(ip, city_reader, asn_reader)
-            data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}})["resources"][resource] = destination
+            data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}, "last_seen": None})["resources"][resource] = destination
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+                data[email][ip]["last_seen"] = date
     return data
-
 
 def process_summary(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     summary = defaultdict(set)
     regions = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
-            ip, email, _, _ = parsed
+            ip, email, _, _, date = parsed
             summary[email].add(ip)
             regions[ip] = get_region_and_asn(ip, city_reader, asn_reader)
-    return {email: (ips, regions) for email, ips in summary.items()}
-
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+    return {email: (ips, regions, last_seen) for email, ips in summary.items()}
 
 def print_sorted_logs(data):
     for email in sorted(data.keys(), key=extract_email_number):
@@ -294,7 +292,6 @@ def print_summary(summary):
         for ip in sorted(ips):
             print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
 
-
 def extract_ip_from_foreign(foreign):
     if foreign in {"@", "unix:@"}:
         return "Unknown IP"
@@ -306,14 +303,16 @@ def extract_ip_from_foreign(foreign):
         return parts[0]
     return "Unknown IP"
 
-
 def process_online_mode(logs_iterator, city_reader, asn_reader):
     ip_last_email = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource=False, city_reader=city_reader, asn_reader=asn_reader)
         if parsed:
-            ip, email, _, _ = parsed
+            ip, email, _, _, date = parsed
             ip_last_email[ip] = email
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
 
     try:
         result = subprocess.run(
@@ -340,7 +339,6 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
     for ip in relevant_ips:
         email = ip_last_email[ip]
         email_to_ips[email].append(ip)
-
     if email_to_ips:
         print(
             color_text("Активные ESTABLISHED соединения (из логов) сгруппированные по email:", TextColor.BRIGHT_GREEN)
@@ -349,10 +347,45 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
             print(f"Email: {highlight_email(email)}")
             for ip in sorted(email_to_ips[email]):
                 region_asn = get_region_and_asn(ip, city_reader, asn_reader)
-                print(f"  IP: {highlight_ip(ip)} ({region_asn})")
+                last_date = format_date(last_seen[ip])
+                print(f"  IP: {highlight_ip(ip)} ({region_asn}) (Last Online: {last_date})")
     else:
         print("Нет ESTABLISHED соединений, найденных в логах.")
 
+class LogApp(App):
+    def __init__(self, data):
+        super().__init__()
+        self.data = data
+
+    def on_mount(self):
+        now = datetime.now()
+        tree = Tree("Logs (Click)")
+        for email in sorted(self.data.keys(), key=extract_email_number):
+            ip_infos = self.data[email]
+            unique_ip_count = len(ip_infos)
+            active_ip_count = 0
+            for info in ip_infos.values():
+                last_seen_str = info["last_seen"].split('.', 1)[0]
+                last_seen_time = datetime.strptime(last_seen_str, "%Y/%m/%d %H:%M:%S")
+                if now - last_seen_time <= timedelta(days=1):
+                    active_ip_count += 1
+            email_node = tree.root.add(
+                Text("Email: ")
+                .append(highlight_email(email))
+                .append(f" | Unique IP's: {unique_ip_count} | In last 24h: {active_ip_count}")
+            )
+            ips_info = list(ip_infos.items())
+            ips_info.sort(key=lambda item: datetime.strptime(item[1]["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S"), reverse=True)
+            for ip, info in ips_info:
+                last_dt = datetime.strptime(info["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S")
+                last_str = last_dt.strftime("%d.%m.%Y %H:%M:%S")
+                ip_node = email_node.add(
+                    Text("IP: ").append(highlight_ip(ip))
+                    .append(f" ({info['region_asn']}) (Last Online: {last_str})")
+                )
+                for resource, dest in sorted(info["resources"].items()):
+                    ip_node.add_leaf(Text("Resource: ").append(highlight_resource(resource)).append(f" -> [{dest}]"))
+        self.mount(tree)
 
 def main(arguments: Namespace):
     try:
