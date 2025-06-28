@@ -26,7 +26,8 @@
 ```
 apt update 
 apt install python3
-apt install python3-geoip2
+apt install python3-geoip2 python3-pip
+python3 -m pip install --break-system-packages textual
 ```
 > [!WARNING]
 > При первой установке пакетов может потребоваться перезагрузка системы через команду `reboot`
