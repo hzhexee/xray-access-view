@@ -245,11 +245,17 @@ def get_region_and_asn(ip, city_reader, asn_reader):
 def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     data = defaultdict(lambda: defaultdict(dict))
     last_seen = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
             ip, email, resource, destination, date = parsed
+            ip, email, resource, destination, date = parsed
             region_asn = get_region_and_asn(ip, city_reader, asn_reader)
+            data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}, "last_seen": None})["resources"][resource] = destination
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+                data[email][ip]["last_seen"] = date
             data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}, "last_seen": None})["resources"][resource] = destination
             if ip not in last_seen or last_seen[ip] < date:
                 last_seen[ip] = date
@@ -303,9 +309,11 @@ def extract_ip_from_foreign(foreign):
 def process_online_mode(logs_iterator, city_reader, asn_reader):
     ip_last_email = {}
     last_seen = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource=False, city_reader=city_reader, asn_reader=asn_reader)
         if parsed:
+            ip, email, _, _, date = parsed
             ip, email, _, _, date = parsed
             ip_last_email[ip] = email
             if ip not in last_seen or last_seen[ip] < date:
@@ -322,7 +330,6 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"Ошибка при выполнении netstat: {e}")
         return
-
     active_ips = set()
     for line in netstat_lines:
         parts = line.split()
@@ -346,8 +353,11 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
                 region_asn = get_region_and_asn(ip, city_reader, asn_reader)
                 last_date = format_date(last_seen[ip])
                 print(f"  IP: {highlight_ip(ip)} ({region_asn}) (Last Online: {last_date})")
+                last_date = format_date(last_seen[ip])
+                print(f"  IP: {highlight_ip(ip)} ({region_asn}) (Last Online: {last_date})")
     else:
         print("Нет ESTABLISHED соединений, найденных в логах.")
+
 
 def main(arguments: Namespace):
     try:

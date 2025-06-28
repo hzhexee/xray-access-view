@@ -1,4 +1,4 @@
-# Xray Access View
+# Xray Access View (DEV)
 ![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 
 **Xray Access View** — это утилита для анализа логов Xray, которая позволяет:
@@ -33,18 +33,18 @@ apt install python3-geoip2
 
 ### Запуск в основном режиме
 ```bash
-python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py)
+python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/dev/view.py)
 ```
 ![image](static/output.jpg)
 
 ### Запуск в основном режиме с выводом не только доменов, но и ip
 ```bash
-python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py) --ip
+python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/dev/view.py) --ip
 ```
 
 ### Запуск в режиме сводки
 ```bash
-python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/main/view.py) --summary
+python3 <(curl -sL https://github.com/Davoyan/xray-access-view/raw/dev/view.py) --summary
 ```
 ![image](static/summary-output.jpg)
 
