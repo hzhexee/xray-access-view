@@ -1,13 +1,17 @@
 import argparse
 import os
 import re
+import subprocess
 import urllib.request
 from argparse import Namespace
 from collections import defaultdict
 from enum import Enum
+from typing import Optional, Tuple, Dict, Set
 from datetime import datetime
 
 import geoip2.database
+from rich.text import Text
+from datetime import timedelta
 from rich.text import Text
 from textual.app import App
 from textual.widgets import Tree
@@ -15,6 +19,23 @@ from textual import events
 from datetime import timedelta
 
 region_asn_cache = {}
+
+# Предкомпилированные регексы для лучшей производительности
+LOG_PATTERN = re.compile(
+    r".*?(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
+    r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+|@|unix:@))?(?::\d+)? accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+(?:\.\w+)*|\d+\.\d+\.\d+\.\d+):\d+ "
+    r"\[(?P<destination>[^\]]+)\](?: email: (?P<email>\S+))?"
+)
+IPV4_PATTERN = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
+IPV6_PATTERN = re.compile(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
+EMAIL_NUMBER_PATTERN = re.compile(r"(\d+)\..*")
+FOREIGN_IP_PATTERN = re.compile(r"^(\d+\.\d+\.\d+\.\d+):\d+$")
+
+
+class PanelType(Enum):
+    MARZBAN = "marzban"
+    REMNAWAVE = "remnawave"
+
 
 class TextStyle(Enum):
     RESET = 0
@@ -43,7 +64,72 @@ def color_text(text: str, color: TextColor) -> str:
 def style_text(text: str, style: TextStyle) -> str:
     return f"\033[{style.value}m{text}\033[{TextStyle.RESET.value}m"
 
-def get_log_file_path() -> str:
+
+def get_panel_type() -> PanelType:
+    """Запросить тип панели у пользователя"""
+    while True:
+        print("\nВыберите тип панели:")
+        print("1. Marzban")
+        print("2. Remnawave")
+        
+        choice = input("Введите номер (1 или 2): ").strip()
+        
+        if choice == "1":
+            return PanelType.MARZBAN
+        elif choice == "2":
+            return PanelType.REMNAWAVE
+        else:
+            print("Ошибка: введите 1 или 2")
+
+
+def setup_remnawave_logs() -> str:
+    """Настроить логи для Remnawave и вернуть путь к файлу логов"""
+    logs_dir = "/var/log/remnalogs/"
+    access_log_path = os.path.join(logs_dir, "access.log")
+    
+    # Проверить наличие Docker
+    try:
+        subprocess.run(["docker", "--version"], check=True, capture_output=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise RuntimeError("Docker не найден или не запущен")
+    
+    try:
+        # Создать директорию для логов
+        print(color_text("Создание директории для логов...", TextColor.BRIGHT_YELLOW))
+        os.makedirs(logs_dir, exist_ok=True)
+        
+        # Проверить существование контейнера
+        result = subprocess.run([
+            "docker", "ps", "-a", "--filter", "name=remnanode", "--format", "{{.Names}}"
+        ], capture_output=True, text=True, check=True)
+        
+        if "remnanode" not in result.stdout:
+            raise RuntimeError("Контейнер 'remnanode' не найден")
+        
+        # Копировать логи из контейнера
+        print(color_text("Копирование логов из контейнера remnanode...", TextColor.BRIGHT_YELLOW))
+        subprocess.run([
+            "docker", "cp", "remnanode:/var/log/supervisor/xray.out.log", access_log_path
+        ], check=True, capture_output=True)
+        
+        print(color_text("Логи успешно скопированы.", TextColor.BRIGHT_GREEN))
+        return access_log_path
+        
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        print(color_text(f"Ошибка при копировании логов: {error_msg}", TextColor.BRIGHT_RED))
+        raise
+    except Exception as e:
+        print(color_text(f"Неожиданная ошибка: {e}", TextColor.BRIGHT_RED))
+        raise
+
+
+def get_log_file_path(panel_type: PanelType) -> str:
+    """Получить путь к файлу логов в зависимости от типа панели"""
+    if panel_type == PanelType.REMNAWAVE:
+        return setup_remnawave_logs()
+    
+    # Для Marzban используем существующую логику
     default_log_file_path = "/var/lib/marzban/access.log"
     while True:
         user_input_path = input(
@@ -75,41 +161,37 @@ def format_date(date_str: str) -> str:
         dt = datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S")
     return dt.strftime("%d.%m.%Y %H:%M:%S")
 
-def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader):
-    pattern = re.compile(
-        r".*?(?P<date>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) "
-        r"from (?P<ip>(?:[0-9a-fA-F:]+|\d+\.\d+\.\d+\.\d+|@|unix:@))?(?::\d+)? accepted (?:(tcp|udp):)?(?P<resource>[\w\.-]+(?:\.\w+)*|\d+\.\d+\.\d+\.\d+):\d+ "
-        r"\[(?P<destination>[^\]]+)\](?: email: (?P<email>\S+))?"
-    )
-    match = pattern.match(log)
-    if match:
-        ip = match.group("ip") or "Unknown IP"
-        date = match.group("date")
-        if ip in {"@", "unix:@"}:
-            ip = "Unknown IP"
-        email = match.group("email") or "Unknown Email"
-        resource = match.group("resource")
-        destination = match.group("destination")
-        ipv4_pattern = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
-        ipv6_pattern = re.compile(r"^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
-        if filter_ip_resource:
-            if ipv4_pattern.match(resource) or ipv6_pattern.match(resource):
-                return None
-        else:
-            if ipv4_pattern.match(resource) or ipv6_pattern.match(resource):
-                region_asn = get_region_and_asn(resource, city_reader, asn_reader)
-                country = region_asn.split(",")[0]
-                if country in {"Russia", "Belarus"}:
-                    resource = color_text(f"{resource} ({country})", TextColor.BRIGHT_RED)
-                else:
-                    resource = f"{resource} ({country})"
-        return ip, email, resource, destination, date
-    return None
+def parse_log_entry(log, filter_ip_resource, city_reader, asn_reader) -> Optional[Tuple[str, str, str, str, str]]:
+    match = LOG_PATTERN.match(log)
+    if not match:
+        return None
+    
+    date = match.group(1)  # Extract the date from the first capture group
+    ip = match.group("ip") or "Unknown IP"
+    if ip in {"@", "unix:@"}:
+        ip = "Unknown IP"
+    email = match.group("email") or "Unknown Email"
+    resource = match.group("resource")
+    destination = match.group("destination")
+
+    if filter_ip_resource:
+        if IPV4_PATTERN.match(resource) or IPV6_PATTERN.match(resource):
+            return None
+    else:
+        if IPV4_PATTERN.match(resource) or IPV6_PATTERN.match(resource):
+            region_asn = get_region_and_asn(resource, city_reader, asn_reader)
+            country = region_asn.split(",")[0]
+            if country in {"Russia", "Belarus"}:
+                resource = color_text(f"{resource} ({country})", TextColor.BRIGHT_RED)
+            else:
+                resource = f"{resource} ({country})"
+    return ip, email, resource, destination, date
+    return ip, email, resource, destination
 
 def extract_email_number(email):
     if email == "Unknown Email":
         return float('inf')
-    match = re.match(r"(\d+)\..*", email)
+    match = EMAIL_NUMBER_PATTERN.match(email)
     return int(match.group(1)) if match else email
 
 def highlight_email(email):
@@ -168,11 +250,16 @@ def get_region_and_asn(ip, city_reader, asn_reader):
 def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     data = defaultdict(lambda: defaultdict(dict))
     last_seen = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
         if parsed:
             ip, email, resource, destination, date = parsed
             region_asn = get_region_and_asn(ip, city_reader, asn_reader)
+            data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}, "last_seen": None})["resources"][resource] = destination
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+                data[email][ip]["last_seen"] = date
             data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}, "last_seen": None})["resources"][resource] = destination
             if ip not in last_seen or last_seen[ip] < date:
                 last_seen[ip] = date
@@ -193,12 +280,31 @@ def process_summary(logs_iterator, city_reader, asn_reader, filter_ip_resource):
                 last_seen[ip] = date
     return {email: (ips, regions, last_seen) for email, ips in summary.items()}
 
+def print_sorted_logs(data):
+    for email in sorted(data.keys(), key=extract_email_number):
+        print(f"Email: {highlight_email(email)}")
+        for ip, info in sorted(data[email].items()):
+            print(f"  IP: {highlight_ip(ip)} ({info['region_asn']})")
+            for resource, destination in sorted(info["resources"].items()):
+                print(f"    Resource: {highlight_resource(resource)} -> [{destination}]")
+
+
+def print_summary(summary):
+    for email in sorted(summary.keys(), key=extract_email_number):
+        ips, regions = summary[email]
+        email_colored = highlight_email(email)
+        unique_ips_colored = (f"{color_text('Unique IPs:', TextColor.BRIGHT_YELLOW)} "
+                      f"{style_text(f'{len(ips)}', TextStyle.BOLD)}")
+        print(f"Email: {email_colored}, {unique_ips_colored}")
+        for ip in sorted(ips):
+            print(f"  IP: {highlight_ip(ip)} ({regions[ip]})")
+
 def extract_ip_from_foreign(foreign):
     if foreign in {"@", "unix:@"}:
         return "Unknown IP"
-    m = re.match(r"^(\d+\.\d+\.\d+\.\d+):\d+$", foreign)
-    if m:
-        return m.group(1)
+    match = FOREIGN_IP_PATTERN.match(foreign)
+    if match:
+        return match.group(1)
     parts = foreign.rsplit(":", 1)
     if len(parts) == 2 and parts[1].isdigit():
         return parts[0]
@@ -207,26 +313,35 @@ def extract_ip_from_foreign(foreign):
 def process_online_mode(logs_iterator, city_reader, asn_reader):
     ip_last_email = {}
     last_seen = {}
+    last_seen = {}
     for log in logs_iterator:
         parsed = parse_log_entry(log, filter_ip_resource=False, city_reader=city_reader, asn_reader=asn_reader)
         if parsed:
             ip, email, _, _, date = parsed
+            ip, email, _, _, date = parsed
             ip_last_email[ip] = email
             if ip not in last_seen or last_seen[ip] < date:
                 last_seen[ip] = date
+
     try:
-        netstat_output = os.popen("netstat -an | grep ESTABLISHED").read().strip().splitlines()
-    except Exception as e:
+        result = subprocess.run(
+            ["netstat", "-an"], 
+            capture_output=True, 
+            text=True, 
+            check=True
+        )
+        netstat_lines = [line for line in result.stdout.splitlines() if "ESTABLISHED" in line]
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"Ошибка при выполнении netstat: {e}")
         return
     active_ips = set()
-    for line in netstat_output:
+    for line in netstat_lines:
         parts = line.split()
-        if len(parts) < 6:
-            continue
-        foreign_address = parts[4]
-        ip = extract_ip_from_foreign(foreign_address)
-        active_ips.add(ip)
+        if len(parts) >= 5:
+            foreign_address = parts[4]
+            ip = extract_ip_from_foreign(foreign_address)
+            active_ips.add(ip)
+
     relevant_ips = active_ips.intersection(ip_last_email.keys())
     email_to_ips = defaultdict(list)
     for ip in relevant_ips:
@@ -240,6 +355,8 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
             print(f"Email: {highlight_email(email)}")
             for ip in sorted(email_to_ips[email]):
                 region_asn = get_region_and_asn(ip, city_reader, asn_reader)
+                last_date = format_date(last_seen[ip])
+                print(f"  IP: {highlight_ip(ip)} ({region_asn}) (Last Online: {last_date})")
                 last_date = format_date(last_seen[ip])
                 print(f"  IP: {highlight_ip(ip)} ({region_asn}) (Last Online: {last_date})")
     else:
@@ -281,27 +398,45 @@ class LogApp(App):
         self.mount(tree)
 
 def main(arguments: Namespace):
-    log_file_path = get_log_file_path()
-    city_db_path = "/tmp/GeoLite2-City.mmdb"
-    asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
-    city_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
-    asn_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
-    download_geoip_db(city_db_url, city_db_path, arguments.without_geolite_update)
-    download_geoip_db(asn_db_url, asn_db_path, arguments.without_geolite_update)
+    try:
+        panel_type = get_panel_type()
+        log_file_path = get_log_file_path(panel_type)
 
-    with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
-        filter_ip_resource = True
-        if arguments.ip:
-            filter_ip_resource = False
-        clear_screen()
-        if arguments.online:
-            with open(log_file_path, "r") as file:
-                process_online_mode(file, city_reader, asn_reader)
-            exit(0)
-        with open(log_file_path, "r") as file:
-            sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
-        app = LogApp(sorted_data)
-        app.run()
+        city_db_path = "/tmp/GeoLite2-City.mmdb"
+        asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
+        city_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
+        asn_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
+
+        download_geoip_db(city_db_url, city_db_path, arguments.without_geolite_update)
+        download_geoip_db(asn_db_url, asn_db_path, arguments.without_geolite_update)
+
+        with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
+            filter_ip_resource = True
+            if arguments.ip:
+                filter_ip_resource = False
+
+            clear_screen()
+
+            if arguments.online:
+                with open(log_file_path, "r", encoding="utf-8", errors="ignore") as file:
+                    process_online_mode(file, city_reader, asn_reader)
+                return
+
+            if arguments.summary:
+                filter_ip_resource = False
+                with open(log_file_path, "r", encoding="utf-8", errors="ignore") as file:
+                    summary_data = process_summary(file, city_reader, asn_reader, filter_ip_resource)
+                print_summary(summary_data)
+            else:
+                with open(log_file_path, "r", encoding="utf-8", errors="ignore") as file:
+                    sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
+                app = LogApp(sorted_data)
+                app.run()
+                
+    except Exception as e:
+        print(color_text(f"Критическая ошибка: {e}", TextColor.BRIGHT_RED))
+        raise
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
