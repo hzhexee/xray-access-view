@@ -190,10 +190,10 @@ def extract_email_number(email):
     return int(match.group(1)) if match else email
 
 def highlight_email(email):
-    return Text(email, style="bold green")
+     return style_text(color_text(email, TextColor.BRIGHT_GREEN), TextStyle.BOLD)
 
 def highlight_ip(ip):
-    return Text(ip, style="blue")
+    return color_text(ip, TextColor.BRIGHT_BLUE)
 
 def highlight_resource(resource):
     highlight_domains = {
@@ -213,11 +213,11 @@ def highlight_resource(resource):
     if any(resource == domain or resource.endswith("." + domain) for domain in highlight_domains) \
             or re.search(r"\.ru$|\.ru.com$|\.su$|\.by$|[а-яА-Я]", resource) \
             or "xn--" in resource:
-        return Text(resource, style="red")
+        return color_text(resource, TextColor.BRIGHT_RED)
     if any(resource == domain or resource.endswith("." + domain) for domain in questinable_domains) \
             or re.search(r"\.cn$|\.citic$|\.baidu$|\.sohu$|\.unicom$", resource):
-        return Text(resource, style="yellow")
-    return Text(resource)
+        return color_text(resource, TextColor.BRIGHT_YELLOW)
+    return resource
 
 def get_region_and_asn(ip, city_reader, asn_reader):
     if ip == "Unknown IP":
