@@ -11,9 +11,6 @@ from datetime import datetime
 
 import geoip2.database
 from rich.text import Text
-from textual.app import App
-from textual.widgets import Tree
-from textual import events
 from datetime import timedelta
 
 region_asn_cache = {}
@@ -351,41 +348,6 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
                 print(f"  IP: {highlight_ip(ip)} ({region_asn}) (Last Online: {last_date})")
     else:
         print("Нет ESTABLISHED соединений, найденных в логах.")
-
-class LogApp(App):
-    def __init__(self, data):
-        super().__init__()
-        self.data = data
-
-    def on_mount(self):
-        now = datetime.now()
-        tree = Tree("Logs (Click)")
-        for email in sorted(self.data.keys(), key=extract_email_number):
-            ip_infos = self.data[email]
-            unique_ip_count = len(ip_infos)
-            active_ip_count = 0
-            for info in ip_infos.values():
-                last_seen_str = info["last_seen"].split('.', 1)[0]
-                last_seen_time = datetime.strptime(last_seen_str, "%Y/%m/%d %H:%M:%S")
-                if now - last_seen_time <= timedelta(days=1):
-                    active_ip_count += 1
-            email_node = tree.root.add(
-                Text("Email: ")
-                .append(highlight_email(email))
-                .append(f" | Unique IP's: {unique_ip_count} | In last 24h: {active_ip_count}")
-            )
-            ips_info = list(ip_infos.items())
-            ips_info.sort(key=lambda item: datetime.strptime(item[1]["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S"), reverse=True)
-            for ip, info in ips_info:
-                last_dt = datetime.strptime(info["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S")
-                last_str = last_dt.strftime("%d.%m.%Y %H:%M:%S")
-                ip_node = email_node.add(
-                    Text("IP: ").append(highlight_ip(ip))
-                    .append(f" ({info['region_asn']}) (Last Online: {last_str})")
-                )
-                for resource, dest in sorted(info["resources"].items()):
-                    ip_node.add_leaf(Text("Resource: ").append(highlight_resource(resource)).append(f" -> [{dest}]"))
-        self.mount(tree)
 
 def main(arguments: Namespace):
     try:
