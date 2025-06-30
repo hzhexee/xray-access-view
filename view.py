@@ -68,18 +68,42 @@ def style_text(text: str, style: TextStyle) -> str:
 def get_panel_type() -> PanelType:
     """Запросить тип панели у пользователя"""
     while True:
-        print("\nВыберите тип панели:")
-        print("1. Marzban")
-        print("2. Remnawave")
+        print("\nВыберите режим работы:")
+        print("1. Marzban (анализ локальных логов)")
+        print("2. Remnawave (анализ локальных логов)")
+        print("3. Сбор логов с удаленных серверов")
         
-        choice = input("Введите номер (1 или 2): ").strip()
+        choice = input("Введите номер (1, 2 или 3): ").strip()
         
         if choice == "1":
             return PanelType.MARZBAN
         elif choice == "2":
             return PanelType.REMNAWAVE
+        elif choice == "3":
+            # Запуск коллектора логов
+            import collect_logs
+            try:
+                print("\n🚀 Запуск коллектора логов...")
+                exit_code = collect_logs.main()
+                if exit_code == 0:
+                    print("\n✅ Сбор логов завершен успешно!")
+                    # Предложить продолжить анализ собранных логов
+                    continue_choice = input("Продолжить анализ собранных логов? (y/N): ").strip().lower()
+                    if continue_choice in ['y', 'yes', 'да']:
+                        continue
+                    else:
+                        exit(0)
+                else:
+                    print("\n❌ Сбор логов завершен с ошибками")
+                    exit(exit_code)
+            except KeyboardInterrupt:
+                print("\n⏹️ Сбор логов прерван пользователем")
+                exit(1)
+            except Exception as e:
+                print(f"\n❌ Ошибка при запуске коллектора логов: {e}")
+                exit(1)
         else:
-            print("Ошибка: введите 1 или 2")
+            print("Ошибка: введите 1, 2 или 3")
 
 
 def setup_remnawave_logs() -> str:
