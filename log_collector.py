@@ -37,7 +37,7 @@ class SSHConfig:
     def parse_hosts(self, exclude_hosts: Optional[List[str]] = None) -> List[str]:
         """Парсить SSH config и извлечь все хосты кроме исключенных"""
         if exclude_hosts is None:
-            exclude_hosts = ["192.168.1.1"]  # OpenWRT по умолчанию
+            exclude_hosts = ["192.168.1.1", "rtr"]  # OpenWRT и роутеры по умолчанию
             
         hosts = []
         
@@ -49,21 +49,60 @@ class SSHConfig:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 
-            # Ищем все строки Host
-            host_pattern = re.compile(r'^Host\s+(.+)$', re.MULTILINE | re.IGNORECASE)
-            matches = host_pattern.findall(content)
+            # Парсим конфигурацию более тщательно
+            current_host = None
+            current_hostname = None
             
-            for match in matches:
-                host = match.strip()
-                # Пропускаем wildcards и исключенные хосты
-                if '*' not in host and host not in exclude_hosts:
-                    hosts.append(host)
+            for line in content.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                    
+                if line.lower().startswith('host '):
+                    # Сохранить предыдущий хост если он подходит
+                    if current_host and self._should_include_host_simple(current_host, current_hostname, exclude_hosts):
+                        hosts.append(current_host)
+                    
+                    # Начать новый хост
+                    current_host = line.split()[1]
+                    current_hostname = current_host  # По умолчанию hostname = host
+                    
+                elif current_host and line.lower().startswith('hostname '):
+                    # Извлечь hostname
+                    current_hostname = line.split(None, 1)[1]
+            
+            # Сохранить последний хост
+            if current_host and self._should_include_host_simple(current_host, current_hostname, exclude_hosts):
+                hosts.append(current_host)
                     
         except Exception as e:
             print(f"❌ Ошибка при чтении SSH config: {e}")
             
         self.hosts = hosts
         return hosts
+    
+    def _should_include_host_simple(self, host_name: str, hostname: Optional[str], exclude_hosts: List[str]) -> bool:
+        """Определить, должен ли хост быть включен в обработку (упрощенная версия)"""
+        # Пропускаем wildcards
+        if '*' in host_name:
+            return False
+            
+        # Проверяем имя хоста
+        if host_name in exclude_hosts:
+            return False
+            
+        # Проверяем IP адрес хоста
+        if hostname and hostname in exclude_hosts:
+            return False
+            
+        # Проверяем, не является ли это локальной сетью
+        if hostname and hostname.startswith(('192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', 
+                               '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
+                               '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.')):
+            print(f"🚫 Пропуск {host_name} (локальная сеть: {hostname})")
+            return False
+                
+        return True
 
 
 class RemoteLogCollector:
@@ -242,7 +281,7 @@ def main():
     parser = argparse.ArgumentParser(description="Сбор логов X-Ray с удаленных серверов")
     parser.add_argument("--logs-dir", default="./logs", help="Локальная директория для логов (по умолчанию: ./logs)")
     parser.add_argument("--container", default="remnanode", help="Имя Docker контейнера (по умолчанию: remnanode)")
-    parser.add_argument("--exclude", nargs="+", default=["192.168.1.1"], help="Хосты для исключения")
+    parser.add_argument("--exclude", nargs="+", default=["192.168.1.1", "rtr"], help="Хосты для исключения")
     parser.add_argument("--cleanup", action="store_true", help="Автоматически удалять временные файлы")
     parser.add_argument("--all", action="store_true", help="Обработать все доступные хосты без запроса")
     
@@ -298,7 +337,7 @@ def main():
             print(f"❌ Неожиданная ошибка при обработке {host}: {e}")
             failed += 1
     
-    # 5. Итоговая статистика
+    # 5. Итоговая статистика и автоматический анализ
     print("\n" + "=" * 50)
     print("📊 РЕЗУЛЬТАТЫ СБОРА ЛОГОВ")
     print("=" * 50)
@@ -312,6 +351,35 @@ def main():
         for log_file in logs_path.glob("xray_*.log"):
             file_size = log_file.stat().st_size
             print(f"  📄 {log_file.name} ({file_size:,} байт)")
+        
+        # Предложить автоматический анализ
+        print("\n" + "=" * 50)
+        print("🔍 АНАЛИЗ СОБРАННЫХ ЛОГОВ")
+        print("=" * 50)
+        
+        auto_analyze = input("Запустить автоматический анализ собранных логов? (Y/n): ").strip().lower()
+        if auto_analyze in ['', 'y', 'yes', 'да']:
+            try:
+                import log_merger
+                print("\n🚀 Запуск анализа...")
+                
+                # Создать объединитель логов
+                merger = log_merger.LogMerger(logs_dir=args.logs_dir)
+                log_files = merger.find_log_files()
+                
+                if log_files:
+                    # Создать отсортированный объединенный лог
+                    merged_path = merger.create_sorted_merged_log(log_files)
+                    
+                    # Запустить GUI анализ
+                    print("\n🎯 Запуск графического интерфейса анализа...")
+                    log_merger.analyze_merged_logs(merged_path, "gui")
+                else:
+                    print("❌ Не найдено файлов логов для анализа")
+                    
+            except Exception as e:
+                print(f"❌ Ошибка при запуске анализа: {e}")
+                print("💡 Вы можете запустить анализ вручную: python log_merger.py")
     
     return 0 if failed == 0 else 1
 

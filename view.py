@@ -86,18 +86,18 @@ def get_panel_type() -> PanelType:
                 print("\n🚀 Запуск коллектора логов...")
                 exit_code = collect_logs.main()
                 if exit_code == 0:
-                    print("\n✅ Сбор логов завершен успешно!")
-                    # Предложить продолжить анализ собранных логов
-                    continue_choice = input("Продолжить анализ собранных логов? (y/N): ").strip().lower()
+                    print("\n✅ Операция завершена успешно!")
+                    # Предложить продолжить анализ локальных логов
+                    continue_choice = input("Вернуться в главное меню? (y/N): ").strip().lower()
                     if continue_choice in ['y', 'yes', 'да']:
                         continue
                     else:
                         exit(0)
                 else:
-                    print("\n❌ Сбор логов завершен с ошибками")
+                    print(f"\n❌ Операция завершена с кодом: {exit_code}")
                     exit(exit_code)
             except KeyboardInterrupt:
-                print("\n⏹️ Сбор логов прерван пользователем")
+                print("\n⏹️ Операция прервана пользователем")
                 exit(1)
             except Exception as e:
                 print(f"\n❌ Ошибка при запуске коллектора логов: {e}")

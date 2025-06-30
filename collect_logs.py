@@ -26,13 +26,14 @@ def main():
     
     if PARAMIKO_AVAILABLE:
         print("✅ Paramiko доступен - рекомендуется Enhanced коллектор")
-        print("\nВыберите тип коллектора:")
+        print("\nВыберите действие:")
         print("1. Стандартный коллектор (subprocess SSH)")
         print("2. Enhanced коллектор (Paramiko SSH) - рекомендуется")
-        print("3. Создать пример SSH конфигурации")
+        print("3. Анализ ранее собранных логов")
+        print("4. Создать пример SSH конфигурации")
         
         while True:
-            choice = input("\nВаш выбор (1-3): ").strip()
+            choice = input("\nВаш выбор (1-4): ").strip()
             
             if choice == "1":
                 print("\n🔄 Запуск стандартного коллектора...")
@@ -43,21 +44,42 @@ def main():
                 print("\n🔄 Запуск Enhanced коллектора...")
                 import enhanced_log_collector
                 return enhanced_log_collector.main()
-                
+            
             elif choice == "3":
+                print("\n🔍 Запуск анализа логов...")
+                import log_merger
+                return log_merger.main()
+                
+            elif choice == "4":
                 print("\n📄 Создание примера SSH конфигурации...")
                 import enhanced_log_collector
                 enhanced_log_collector.create_example_ssh_config()
                 return 0
                 
             else:
-                print("❌ Неверный выбор. Введите 1, 2 или 3")
+                print("❌ Неверный выбор. Введите 1, 2, 3 или 4")
     else:
         print("⚠️ Paramiko недоступен - используется стандартный коллектор")
         print("💡 Для установки Paramiko: pip install paramiko")
-        print("\n🔄 Запуск стандартного коллектора...")
-        import log_collector
-        return log_collector.main()
+        print("\nВыберите действие:")
+        print("1. Стандартный коллектор")
+        print("2. Анализ ранее собранных логов")
+        
+        while True:
+            choice = input("\nВаш выбор (1-2): ").strip()
+            
+            if choice == "1":
+                print("\n🔄 Запуск стандартного коллектора...")
+                import log_collector
+                return log_collector.main()
+            
+            elif choice == "2":
+                print("\n🔍 Запуск анализа логов...")
+                import log_merger
+                return log_merger.main()
+            
+            else:
+                print("❌ Неверный выбор. Введите 1 или 2")
 
 
 if __name__ == "__main__":

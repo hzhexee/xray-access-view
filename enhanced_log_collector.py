@@ -41,7 +41,7 @@ class EnhancedSSHConfig:
     def parse_ssh_config(self, exclude_hosts: Optional[List[str]] = None) -> Dict[str, Dict[str, str]]:
         """Парсить SSH config и извлечь конфигурацию хостов"""
         if exclude_hosts is None:
-            exclude_hosts = ["192.168.1.1"]
+            exclude_hosts = ["192.168.1.1", "rtr"]  # Добавим стандартные исключения
             
         hosts_config = {}
         
@@ -63,7 +63,7 @@ class EnhancedSSHConfig:
                 
                 if line.lower().startswith('host '):
                     # Сохранить предыдущий хост
-                    if current_host and current_host not in exclude_hosts and '*' not in current_host:
+                    if current_host and self._should_include_host(current_host, current_config, exclude_hosts):
                         hosts_config[current_host] = current_config.copy()
                     
                     # Начать новый хост
@@ -76,7 +76,7 @@ class EnhancedSSHConfig:
                     current_config[key.lower()] = value
             
             # Сохранить последний хост
-            if current_host and current_host not in exclude_hosts and '*' not in current_host:
+            if current_host and self._should_include_host(current_host, current_config, exclude_hosts):
                 hosts_config[current_host] = current_config.copy()
                 
         except Exception as e:
@@ -84,6 +84,33 @@ class EnhancedSSHConfig:
             
         self.hosts_config = hosts_config
         return hosts_config
+    
+    def _should_include_host(self, host_name: str, host_config: Dict[str, str], exclude_hosts: List[str]) -> bool:
+        """Определить, должен ли хост быть включен в обработку"""
+        # Пропускаем wildcards
+        if '*' in host_name:
+            return False
+            
+        # Проверяем имя хоста
+        if host_name in exclude_hosts:
+            return False
+            
+        # Проверяем IP адрес хоста
+        hostname = host_config.get('hostname', host_name)
+        if hostname in exclude_hosts:
+            return False
+            
+        # Проверяем, не является ли это роутером по паттернам
+        router_patterns = ['192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', 
+                          '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
+                          '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.']
+        
+        for pattern in router_patterns:
+            if hostname.startswith(pattern):
+                print(f"🚫 Пропуск {host_name} (локальная сеть: {hostname})")
+                return False
+                
+        return True
 
 
 class EnhancedRemoteLogCollector:
@@ -321,7 +348,7 @@ def main():
     parser = argparse.ArgumentParser(description="Enhanced X-Ray Log Collector с поддержкой Paramiko")
     parser.add_argument("--logs-dir", default="./logs", help="Локальная директория для логов")
     parser.add_argument("--container", default="remnanode", help="Имя Docker контейнера")
-    parser.add_argument("--exclude", nargs="+", default=["192.168.1.1"], help="Хосты для исключения")
+    parser.add_argument("--exclude", nargs="+", default=["192.168.1.1", "rtr"], help="Хосты для исключения")
     parser.add_argument("--cleanup", action="store_true", help="Автоматически удалять временные файлы")
     parser.add_argument("--all", action="store_true", help="Обработать все доступные хосты")
     parser.add_argument("--create-config", action="store_true", help="Создать пример SSH конфигурации")
@@ -398,7 +425,7 @@ def main():
         if host != selected_hosts[-1]:
             time.sleep(1)
     
-    # Итоговая статистика
+    # 5. Итоговая статистика и автоматический анализ
     elapsed_time = time.time() - start_time
     print("\n" + "=" * 50)
     print("📊 РЕЗУЛЬТАТЫ СБОРА ЛОГОВ")
@@ -417,6 +444,35 @@ def main():
             total_size += file_size
             print(f"  📄 {log_file.name} ({file_size:,} байт)")
         print(f"📦 Общий размер: {total_size:,} байт")
+        
+        # Предложить автоматический анализ
+        print("\n" + "=" * 50)
+        print("🔍 АНАЛИЗ СОБРАННЫХ ЛОГОВ")
+        print("=" * 50)
+        
+        auto_analyze = input("Запустить автоматический анализ собранных логов? (Y/n): ").strip().lower()
+        if auto_analyze in ['', 'y', 'yes', 'да']:
+            try:
+                import log_merger
+                print("\n🚀 Запуск анализа...")
+                
+                # Создать объединитель логов
+                merger = log_merger.LogMerger(logs_dir=args.logs_dir)
+                log_files = merger.find_log_files()
+                
+                if log_files:
+                    # Создать отсортированный объединенный лог
+                    merged_path = merger.create_sorted_merged_log(log_files)
+                    
+                    # Запустить GUI анализ
+                    print("\n🎯 Запуск графического интерфейса анализа...")
+                    log_merger.analyze_merged_logs(merged_path, "gui")
+                else:
+                    print("❌ Не найдено файлов логов для анализа")
+                    
+            except Exception as e:
+                print(f"❌ Ошибка при запуске анализа: {e}")
+                print("💡 Вы можете запустить анализ вручную: python log_merger.py")
     
     return 0 if failed == 0 else 1
 
