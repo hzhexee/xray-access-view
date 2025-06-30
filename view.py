@@ -3,6 +3,8 @@ import os
 import re
 import subprocess
 import urllib.request
+import tempfile
+import platform
 from argparse import Namespace
 from collections import defaultdict
 from enum import Enum
@@ -65,6 +67,30 @@ def style_text(text: str, style: TextStyle) -> str:
     return f"\033[{style.value}m{text}\033[{TextStyle.RESET.value}m"
 
 
+def get_temp_dir() -> str:
+    """Получить кроссплатформенную временную директорию"""
+    return tempfile.gettempdir()
+
+
+def get_platform_specific_paths():
+    """Получить специфичные для платформы пути"""
+    temp_dir = get_temp_dir()
+    
+    paths = {
+        'city_db': os.path.join(temp_dir, 'GeoLite2-City.mmdb'),
+        'asn_db': os.path.join(temp_dir, 'GeoLite2-ASN.mmdb'),
+        'logs_dir': './logs' if platform.system() == 'Windows' else '/var/log/remnalogs/',
+        'marzban_log': './access.log' if platform.system() == 'Windows' else '/var/lib/marzban/access.log'
+    }
+    
+    return paths
+
+
+def ensure_directory_exists(directory_path: str):
+    """Убедиться, что директория существует"""
+    os.makedirs(directory_path, exist_ok=True)
+
+
 def get_panel_type() -> PanelType:
     """Запросить тип панели у пользователя"""
     while True:
@@ -81,7 +107,7 @@ def get_panel_type() -> PanelType:
             return PanelType.REMNAWAVE
         elif choice == "3":
             # Запуск коллектора логов
-            import collect_logs
+            import modules.collect_logs as collect_logs
             try:
                 print("\n🚀 Запуск коллектора логов...")
                 exit_code = collect_logs.main()
@@ -108,19 +134,44 @@ def get_panel_type() -> PanelType:
 
 def setup_remnawave_logs() -> str:
     """Настроить логи для Remnawave и вернуть путь к файлу логов"""
-    logs_dir = "/var/log/remnalogs/"
-    access_log_path = os.path.join(logs_dir, "access.log")
+    paths = get_platform_specific_paths()
+    
+    if platform.system() == 'Windows':
+        # На Windows используем локальную директорию
+        logs_dir = "./logs"
+        access_log_path = os.path.join(logs_dir, "remnawave_access.log")
+        print(color_text("⚠️ Windows обнаружена: Docker команды могут не работать", TextColor.BRIGHT_YELLOW))
+        print(color_text("💡 Рекомендуется использовать режим сбора логов с удаленных серверов", TextColor.BRIGHT_CYAN))
+    else:
+        # Linux путь как раньше
+        logs_dir = paths['logs_dir']
+        access_log_path = os.path.join(logs_dir, "access.log")
     
     # Проверить наличие Docker
     try:
         subprocess.run(["docker", "--version"], check=True, capture_output=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
+        if platform.system() == 'Windows':
+            print(color_text("⚠️ Docker не найден. На Windows рекомендуется:", TextColor.BRIGHT_YELLOW))
+            print("  1. Использовать WSL2 с Docker")
+            print("  2. Или выбрать режим сбора логов с удаленных серверов")
+            
+            # Предложить создать тестовый файл
+            test_choice = input("Создать тестовый файл лога для демонстрации? (y/N): ").strip().lower()
+            if test_choice in ['y', 'yes', 'да']:
+                ensure_directory_exists(logs_dir)
+                with open(access_log_path, 'w', encoding='utf-8') as f:
+                    f.write("# Тестовый лог для демонстрации на Windows\n")
+                    f.write("2025/06/30 12:00:00 from 1.2.3.4:12345 accepted tcp:example.com:443 [outbound] email: test@example.com\n")
+                print(color_text(f"Тестовый лог создан: {access_log_path}", TextColor.BRIGHT_GREEN))
+                return access_log_path
+        
         raise RuntimeError("Docker не найден или не запущен")
     
     try:
         # Создать директорию для логов
         print(color_text("Создание директории для логов...", TextColor.BRIGHT_YELLOW))
-        os.makedirs(logs_dir, exist_ok=True)
+        ensure_directory_exists(logs_dir)
         
         # Проверить существование контейнера
         result = subprocess.run([
@@ -153,15 +204,39 @@ def get_log_file_path(panel_type: PanelType) -> str:
     if panel_type == PanelType.REMNAWAVE:
         return setup_remnawave_logs()
     
-    # Для Marzban используем существующую логику
-    default_log_file_path = "/var/lib/marzban/access.log"
+    # Для Marzban используем кроссплатформенную логику
+    paths = get_platform_specific_paths()
+    default_log_file_path = paths['marzban_log']
+    
     while True:
         user_input_path = input(
             f"Укажите путь до логов (нажмите Enter для использования '{default_log_file_path}'): "
         ).strip()
         log_file_path = user_input_path or default_log_file_path
+        
         if os.path.exists(log_file_path):
             return log_file_path
+        
+        # На Windows предложить создать тестовый файл
+        if platform.system() == 'Windows' and not user_input_path:
+            print(f"Файл '{log_file_path}' не существует.")
+            create_test = input("Создать тестовый файл лога для демонстрации? (y/N): ").strip().lower()
+            if create_test in ['y', 'yes', 'да']:
+                # Создать директорию если нужно
+                log_dir = os.path.dirname(log_file_path)
+                if log_dir:
+                    ensure_directory_exists(log_dir)
+                
+                # Создать тестовый файл
+                with open(log_file_path, 'w', encoding='utf-8') as f:
+                    f.write("# Тестовый лог Marzban для демонстрации на Windows\n")
+                    f.write("2025/06/30 12:00:00 from 1.2.3.4:12345 accepted tcp:example.com:443 [outbound] email: user1@test.com\n")
+                    f.write("2025/06/30 12:01:00 from 5.6.7.8:54321 accepted tcp:google.com:443 [outbound] email: user2@test.com\n")
+                    f.write("2025/06/30 12:02:00 from 9.10.11.12:11111 accepted tcp:yandex.ru:443 [outbound] email: user3@test.com\n")
+                
+                print(color_text(f"Тестовый лог создан: {log_file_path}", TextColor.BRIGHT_GREEN))
+                return log_file_path
+        
         print(f"Ошибка: файл по пути '{log_file_path}' не существует.")
 
 def clear_screen():
@@ -423,14 +498,22 @@ class LogApp(App):
 
 def main(arguments: Namespace):
     try:
+        # Показать информацию о платформе
+        print(f"🖥️ Платформа: {platform.system()} {platform.release()}")
+        
         panel_type = get_panel_type()
         log_file_path = get_log_file_path(panel_type)
 
-        city_db_path = "/tmp/GeoLite2-City.mmdb"
-        asn_db_path = "/tmp/GeoLite2-ASN.mmdb"
+        # Использовать кроссплатформенные пути
+        paths = get_platform_specific_paths()
+        city_db_path = paths['city_db']
+        asn_db_path = paths['asn_db']
+        
         city_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
         asn_db_url = "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
 
+        print(f"📁 Базы данных будут сохранены в: {get_temp_dir()}")
+        
         download_geoip_db(city_db_url, city_db_path, arguments.without_geolite_update)
         download_geoip_db(asn_db_url, asn_db_path, arguments.without_geolite_update)
 

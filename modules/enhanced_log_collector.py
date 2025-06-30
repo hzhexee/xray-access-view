@@ -190,7 +190,13 @@ class EnhancedRemoteLogCollector:
     def copy_log_from_container_paramiko(self, client: paramiko.SSHClient, host: str, container_name: str = "remnanode") -> bool:
         """Скопировать лог из Docker контейнера через Paramiko"""
         container_log_path = "/var/log/supervisor/xray.out.log"
-        remote_temp_path = f"/tmp/xray_{host}.log"
+        
+        # Используем временную директорию на удаленном хосте
+        if platform.system() == "Windows":
+            # На Windows клиенте используем /tmp на удаленном Linux сервере
+            remote_temp_path = f"/tmp/xray_{host}.log"
+        else:
+            remote_temp_path = f"/tmp/xray_{host}.log"
         
         command = f'docker cp {container_name}:{container_log_path} {remote_temp_path}'
         print(f"📦 Копирование лога из контейнера...")
@@ -221,6 +227,9 @@ class EnhancedRemoteLogCollector:
                 print(f"❌ Файл {remote_log_path} не найден на удаленном сервере")
                 sftp.close()
                 return False
+            
+            # Убедиться, что локальная директория существует
+            self.local_logs_dir.mkdir(exist_ok=True)
             
             # Скачать файл
             sftp.get(remote_log_path, str(local_log_path))
@@ -363,10 +372,10 @@ def main():
     
     print("🚀 Enhanced X-Ray Log Collector")
     print("=" * 50)
-    print(f"ОС: {platform.system()}")
-    print(f"Paramiko доступен: {'✅' if PARAMIKO_AVAILABLE and not args.no_paramiko else '❌'}")
-    print(f"Локальная директория: {args.logs_dir}")
-    print(f"Контейнер: {args.container}")
+    print(f"🖥️ ОС клиента: {platform.system()}")
+    print(f"✅ Paramiko доступен: {'✅' if PARAMIKO_AVAILABLE and not args.no_paramiko else '❌'}")
+    print(f"📁 Локальная директория: {args.logs_dir}")
+    print(f"🐳 Контейнер: {args.container}")
     
     # Инициализация SSH конфигурации
     print("\n📂 Чтение SSH конфигурации...")

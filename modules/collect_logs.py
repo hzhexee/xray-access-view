@@ -42,7 +42,7 @@ def main():
                 
             elif choice == "2":
                 print("\n🔄 Запуск Enhanced коллектора...")
-                import enhanced_log_collector
+                import modules.enhanced_log_collector as enhanced_log_collector
                 return enhanced_log_collector.main()
             
             elif choice == "3":
@@ -52,7 +52,7 @@ def main():
                 
             elif choice == "4":
                 print("\n📄 Создание примера SSH конфигурации...")
-                import enhanced_log_collector
+                import modules.enhanced_log_collector as enhanced_log_collector
                 enhanced_log_collector.create_example_ssh_config()
                 return 0
                 

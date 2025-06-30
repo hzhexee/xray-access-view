@@ -19,7 +19,7 @@ try:
 except ImportError:
     PARAMIKO_AVAILABLE = False
 
-from enhanced_log_collector import EnhancedSSHConfig
+from modules.enhanced_log_collector import EnhancedSSHConfig
 
 
 def test_ssh_connections():

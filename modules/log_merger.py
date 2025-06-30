@@ -6,15 +6,31 @@ Log Merger and Analyzer
 
 import os
 import sys
+import platform
+import tempfile
 from pathlib import Path
 from typing import List, Dict, Optional
-import tempfile
 import argparse
 from datetime import datetime
 
 # Добавить текущую директорию в path для импорта модулей
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
+
+
+def get_temp_dir() -> str:
+    """Получить кроссплатформенную временную директорию"""
+    return tempfile.gettempdir()
+
+
+def get_platform_specific_paths():
+    """Получить специфичные для платформы пути для баз данных"""
+    temp_dir = get_temp_dir()
+    
+    return {
+        'city_db': os.path.join(temp_dir, 'GeoLite2-City.mmdb'),
+        'asn_db': os.path.join(temp_dir, 'GeoLite2-ASN.mmdb')
+    }
 
 
 class LogMerger:
@@ -216,8 +232,17 @@ def analyze_merged_logs(merged_log_path: str, analysis_mode: str = "gui"):
         
         view.get_panel_type = mock_get_panel_type
         
+        # Monkey patch для кроссплатформенных путей
+        original_get_platform_specific_paths = view.get_platform_specific_paths
+        
+        def mock_get_platform_specific_paths():
+            return get_platform_specific_paths()
+        
+        view.get_platform_specific_paths = mock_get_platform_specific_paths
+        
         print(f"\n🔍 Запуск анализа объединенных логов...")
-        print(f"📁 Файл: {merged_log_path}")
+        print(f"�️ Платформа: {platform.system()}")
+        print(f"�📁 Файл: {merged_log_path}")
         print(f"🎯 Режим: {analysis_mode}")
         
         # Запустить анализ
@@ -231,6 +256,7 @@ def analyze_merged_logs(merged_log_path: str, analysis_mode: str = "gui"):
         # Восстановить оригинальные функции
         view.get_log_file_path = original_get_log_file_path
         view.get_panel_type = original_get_panel_type
+        view.get_platform_specific_paths = original_get_platform_specific_paths
         sys.argv = original_argv
         
     except Exception as e:
@@ -254,6 +280,8 @@ def main():
     
     print("🔄 Log Merger and Analyzer")
     print("=" * 50)
+    print(f"🖥️ Платформа: {platform.system()}")
+    print(f"📁 Временная директория: {get_temp_dir()}")
     
     # Создать объединитель логов
     merger = LogMerger(logs_dir=args.logs_dir)
