@@ -213,6 +213,8 @@ def analyze_merged_logs(merged_log_path: str, analysis_mode: str = "gui"):
             sys.argv = ['view.py', '--online']
         elif analysis_mode == "ip":
             sys.argv = ['view.py', '--ip']
+        elif analysis_mode == "nodes":
+            sys.argv = ['view.py', '--nodes']
         else:
             sys.argv = ['view.py']  # GUI режим
         
@@ -250,7 +252,8 @@ def analyze_merged_logs(merged_log_path: str, analysis_mode: str = "gui"):
             summary=(analysis_mode == "summary"),
             ip=(analysis_mode == "ip"),
             online=(analysis_mode == "online"),
-            without_geolite_update=False
+            without_geolite_update=False,
+            nodes=(analysis_mode == "nodes")  # Обновляем логику
         ))
         
         # Восстановить оригинальные функции
@@ -272,7 +275,7 @@ def main():
     parser.add_argument("--logs-dir", default="./logs", help="Директория с логами")
     parser.add_argument("--output", help="Путь для сохранения объединенного лога")
     parser.add_argument("--sort", action="store_true", help="Сортировать логи по времени")
-    parser.add_argument("--analyze", choices=["gui", "summary", "online", "ip"], default="gui", 
+    parser.add_argument("--analyze", choices=["gui", "summary", "online", "ip", "nodes"], default="gui", 
                        help="Режим анализа после объединения")
     parser.add_argument("--no-analyze", action="store_true", help="Не запускать анализ")
     

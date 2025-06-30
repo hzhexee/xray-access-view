@@ -365,6 +365,42 @@ def process_logs(logs_iterator, city_reader, asn_reader, filter_ip_resource):
                 data[email][ip]["last_seen"] = date
     return data
 
+def process_logs_with_nodes(logs_iterator, city_reader, asn_reader, filter_ip_resource):
+    """Обработка логов с группировкой по нодам для каждого пользователя"""
+    data = defaultdict(lambda: defaultdict(dict))
+    nodes_data = defaultdict(lambda: defaultdict(dict))
+    last_seen = {}
+    
+    for log in logs_iterator:
+        parsed = parse_log_entry(log, filter_ip_resource, city_reader, asn_reader)
+        if parsed:
+            ip, email, resource, destination, date = parsed
+            region_asn = get_region_and_asn(ip, city_reader, asn_reader)
+            
+            # Обычная структура данных (как раньше)
+            data[email].setdefault(ip, {"region_asn": region_asn, "resources": {}, "last_seen": None})["resources"][resource] = destination
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+                data[email][ip]["last_seen"] = date
+            
+            # Новая структура - группировка по нодам
+            node_name = destination if destination else "Unknown Node"
+            if node_name not in nodes_data[email]:
+                nodes_data[email][node_name] = {"ips": {}, "resources": set()}
+            
+            nodes_data[email][node_name]["ips"][ip] = {
+                "region_asn": region_asn,
+                "last_seen": date
+            }
+            nodes_data[email][node_name]["resources"].add(resource)
+            
+            # Обновляем время последнего подключения для ноды
+            if ip not in last_seen or last_seen[ip] < date:
+                last_seen[ip] = date
+                nodes_data[email][node_name]["ips"][ip]["last_seen"] = date
+    
+    return data, nodes_data
+
 def process_summary(logs_iterator, city_reader, asn_reader, filter_ip_resource):
     summary = defaultdict(set)
     regions = {}
@@ -486,7 +522,7 @@ class LogApp(App):
             ips_info = list(ip_infos.items())
             ips_info.sort(key=lambda item: datetime.strptime(item[1]["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S"), reverse=True)
             for ip, info in ips_info:
-                last_dt = datetime.strptime(info["last_seen"].split('.',1)[0], "%Y/%m/%d %H:%M:%S")
+                last_dt = datetime.strptime(info["last_seen"].split('.', 1)[0], "%Y/%m/%d %H:%M:%S")
                 last_str = last_dt.strftime("%d.%m.%Y %H:%M:%S")
                 ip_node = email_node.add(
                     Text("IP: ").append(highlight_ip(ip))
@@ -495,6 +531,125 @@ class LogApp(App):
                 for resource, dest in sorted(info["resources"].items()):
                     ip_node.add_leaf(Text("Resource: ").append(highlight_resource(resource)).append(f" -> [{dest}]"))
         self.mount(tree)
+
+class LogAppWithNodes(App):
+    def __init__(self, data, nodes_data):
+        super().__init__()
+        self.data = data
+        self.nodes_data = nodes_data
+
+    def on_mount(self):
+        now = datetime.now()
+        tree = Tree("Logs - Nodes View (Click)")
+        
+        for email in sorted(self.nodes_data.keys(), key=extract_email_number):
+            user_nodes = self.nodes_data[email]
+            total_nodes = len(user_nodes)
+            
+            # Подсчет активных нод за последние 24 часа
+            active_nodes_count = 0
+            total_ips_count = 0
+            active_ips_count = 0
+            
+            for node_name, node_info in user_nodes.items():
+                node_has_active_ip = False
+                for ip, ip_info in node_info["ips"].items():
+                    total_ips_count += 1
+                    last_seen_str = ip_info["last_seen"].split('.', 1)[0]
+                    last_seen_time = datetime.strptime(last_seen_str, "%Y/%m/%d %H:%M:%S")
+                    if now - last_seen_time <= timedelta(days=1):
+                        active_ips_count += 1
+                        node_has_active_ip = True
+                if node_has_active_ip:
+                    active_nodes_count += 1
+            
+            # Создаем узел пользователя
+            email_node = tree.root.add(
+                Text("User: ")
+                .append(highlight_email(email))
+                .append(f" | Nodes: {total_nodes} | IPs: {total_ips_count} | Active in 24h: {active_nodes_count} nodes, {active_ips_count} IPs")
+            )
+            
+            # Сортируем ноды по количеству IP
+            sorted_nodes = sorted(user_nodes.items(), key=lambda x: len(x[1]["ips"]), reverse=True)
+            
+            for node_name, node_info in sorted_nodes:
+                node_ips = node_info["ips"]
+                node_resources = node_info["resources"]
+                
+                # Найти последнее время подключения к ноде
+                latest_connection = None
+                for ip_info in node_ips.values():
+                    ip_time_str = ip_info["last_seen"].split('.', 1)[0]
+                    ip_time = datetime.strptime(ip_time_str, "%Y/%m/%d %H:%M:%S")
+                    if latest_connection is None or ip_time > latest_connection:
+                        latest_connection = ip_time
+                
+                latest_str = latest_connection.strftime("%d.%m.%Y %H:%M:%S") if latest_connection else "Unknown"
+                
+                # Создаем узел ноды
+                node_node = email_node.add(
+                    Text("Node: ")
+                    .append(color_text(node_name, TextColor.BRIGHT_CYAN))
+                    .append(f" | IPs: {len(node_ips)} | Resources: {len(node_resources)} | Last: {latest_str}")
+                )
+                
+                # Добавляем IP адреса для этой ноды
+                sorted_ips = sorted(node_ips.items(), 
+                                  key=lambda x: datetime.strptime(x[1]["last_seen"].split('.', 1)[0], "%Y/%m/%d %H:%M:%S"), 
+                                  reverse=True)
+                
+                for ip, ip_info in sorted_ips:
+                    last_dt = datetime.strptime(ip_info["last_seen"].split('.', 1)[0], "%Y/%m/%d %H:%M:%S")
+                    last_str = last_dt.strftime("%d.%m.%Y %H:%M:%S")
+                    
+                    ip_node = node_node.add(
+                        Text("IP: ").append(highlight_ip(ip))
+                        .append(f" ({ip_info['region_asn']}) (Last: {last_str})")
+                    )
+                
+                # Добавляем ресурсы для этой ноды
+                for resource in sorted(node_resources):
+                    node_node.add_leaf(Text("Resource: ").append(highlight_resource(resource)))
+        
+        self.mount(tree)
+
+def get_display_mode() -> str:
+    """Запросить режим отображения у пользователя"""
+    while True:
+        print("\nВыберите режим отображения:")
+        print("1. Обычный режим (группировка по IP)")
+        print("2. Режим нод (группировка по серверным нодам)")
+        print("3. Краткий отчет (summary)")
+        print("4. Режим онлайн (активные соединения)")
+        
+        choice = input("Введите номер (1, 2, 3 или 4): ").strip()
+        
+        if choice == "1":
+            return "normal"
+        elif choice == "2":
+            return "nodes"
+        elif choice == "3":
+            return "summary"
+        elif choice == "4":
+            return "online"
+        else:
+            print("Ошибка: введите 1, 2, 3 или 4")
+
+def create_default_namespace(**kwargs) -> Namespace:
+    """Создает объект Namespace с значениями по умолчанию для всех поддерживаемых атрибутов"""
+    defaults = {
+        'summary': False,
+        'ip': False,
+        'online': False,
+        'without_geolite_update': False,
+        'nodes': False
+    }
+    
+    # Обновляем значения по умолчанию переданными параметрами
+    defaults.update(kwargs)
+    
+    return Namespace(**defaults)
 
 def main(arguments: Namespace):
     try:
@@ -514,27 +669,56 @@ def main(arguments: Namespace):
 
         print(f"📁 Базы данных будут сохранены в: {get_temp_dir()}")
         
-        download_geoip_db(city_db_url, city_db_path, arguments.without_geolite_update)
-        download_geoip_db(asn_db_url, asn_db_path, arguments.without_geolite_update)
+        # Проверяем наличие атрибута without_geolite_update
+        without_update = getattr(arguments, 'without_geolite_update', False)
+        download_geoip_db(city_db_url, city_db_path, without_update)
+        download_geoip_db(asn_db_url, asn_db_path, without_update)
 
         with geoip2.database.Reader(city_db_path) as city_reader, geoip2.database.Reader(asn_db_path) as asn_reader:
             filter_ip_resource = True
-            if arguments.ip:
+            # Проверяем наличие атрибута ip
+            if getattr(arguments, 'ip', False):
                 filter_ip_resource = False
 
             clear_screen()
 
-            if arguments.online:
+            # Определяем режим отображения с проверкой наличия атрибутов
+            display_mode = None
+            
+            # Проверяем каждый атрибут на существование
+            online_mode = getattr(arguments, 'online', False)
+            summary_mode = getattr(arguments, 'summary', False)
+            nodes_mode = getattr(arguments, 'nodes', False)
+            
+            if online_mode:
+                display_mode = "online"
+            elif summary_mode:
+                display_mode = "summary"
+            elif nodes_mode:
+                display_mode = "nodes"
+            elif not any([online_mode, summary_mode, nodes_mode]):
+                # Если никакие флаги не указаны, спрашиваем у пользователя
+                display_mode = get_display_mode()
+            else:
+                display_mode = "normal"
+
+            # Обработка в зависимости от выбранного режима
+            if display_mode == "online":
                 with open(log_file_path, "r", encoding="utf-8", errors="ignore") as file:
                     process_online_mode(file, city_reader, asn_reader)
                 return
-
-            if arguments.summary:
+            elif display_mode == "summary":
                 filter_ip_resource = False
                 with open(log_file_path, "r", encoding="utf-8", errors="ignore") as file:
                     summary_data = process_summary(file, city_reader, asn_reader, filter_ip_resource)
                 print_summary(summary_data)
-            else:
+            elif display_mode == "nodes":
+                # Новый режим с группировкой по нодам
+                with open(log_file_path, "r", encoding="utf-8", errors="ignore") as file:
+                    sorted_data, nodes_data = process_logs_with_nodes(file, city_reader, asn_reader, filter_ip_resource)
+                app = LogAppWithNodes(sorted_data, nodes_data)
+                app.run()
+            else:  # normal mode
                 with open(log_file_path, "r", encoding="utf-8", errors="ignore") as file:
                     sorted_data = process_logs(file, city_reader, asn_reader, filter_ip_resource)
                 app = LogApp(sorted_data)
@@ -565,6 +749,11 @@ if __name__ == "__main__":
         "-wgu", "--without-geolite-update",
         action="store_true",
         help="Не обновлять базы данных GeoLite в случае, если они существуют"
+    )
+    parser.add_argument(
+        "--nodes",
+        action="store_true",
+        help="Показать данные с группировкой по нодам для каждого пользователя"
     )
     args = parser.parse_args()
     try:
