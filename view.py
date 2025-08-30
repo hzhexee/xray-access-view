@@ -52,6 +52,10 @@ class TextColor(Enum):
     BRIGHT_CYAN = 96
     BRIGHT_WHITE = 97
 
+# === Настраиваемые цвета подсветки аутбаундов ===
+OUTBOUND_CONSOLE_COLOR = TextColor.BRIGHT_YELLOW      # смените при необходимости
+OUTBOUND_RICH_STYLE = "bold blue"                  # стиль Rich (можно 'bold yellow', 'red', и т.п.)
+
 def color_text(text: str, color: TextColor) -> str:
     return f"\033[{color.value}m{text}\033[{TextStyle.RESET.value}m"
 
@@ -328,12 +332,12 @@ def highlight_destination_console(destination: str) -> str:
     if "->" in destination:
         left, right = map(str.strip, destination.split("->", 1))
         if right != "DIRECT":
-            right = color_text(right, TextColor.BRIGHT_YELLOW)
+            right = color_text(right, OUTBOUND_CONSOLE_COLOR)
         return f"{left} -> {right}"
 
     # Одиночный outbound
     if destination != "DIRECT" and " " not in destination and ":" not in destination and "->" not in destination and ">>" not in destination:
-        return color_text(destination, TextColor.BRIGHT_YELLOW)
+        return color_text(destination, OUTBOUND_CONSOLE_COLOR)
         
     return destination
 
@@ -345,14 +349,14 @@ def highlight_destination_rich(destination: str) -> Text:
         left, right = map(str.strip, destination.split("->", 1))
         result.append(left + " -> ")
         if right != "DIRECT":
-            result.append(right, style="light green")
+            result.append(right, style=OUTBOUND_RICH_STYLE)
         else:
             result.append(right)
         return result
     
     # Одиночный outbound
     if destination != "DIRECT" and " " not in destination and ":" not in destination and "->" not in destination and ">>" not in destination:
-        return Text(destination, style="light green")
+        return Text(destination, style=OUTBOUND_RICH_STYLE)
         
     return Text(destination)
 
