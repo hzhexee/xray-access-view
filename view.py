@@ -323,19 +323,6 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
         print("Нет ESTABLISHED соединений, найденных в логах.")
 
 def highlight_destination_console(destination: str) -> str:
-    """Подсветка аутбаунда (консоль).
-    Поддерживаемые форматы:
-      servername >> outbound
-      servername -> outbound        (НОВЫЙ)
-      outbound:servername
-      SINGLE_OUTBOUND
-    """
-    # Формат "servername >> outbound"
-    if ">>" in destination:
-        left, right = map(str.strip, destination.split(">>", 1))
-        if right != "DIRECT":
-            right = color_text(right, TextColor.BRIGHT_YELLOW)
-        return f"{left} >> {right}"
 
     # Новый формат "servername -> outbound"
     if "->" in destination:
@@ -343,13 +330,6 @@ def highlight_destination_console(destination: str) -> str:
         if right != "DIRECT":
             right = color_text(right, TextColor.BRIGHT_YELLOW)
         return f"{left} -> {right}"
-    
-    # Формат "outbound:servername"
-    if ":" in destination and not destination.startswith("127.0.0.1:"):
-        outbound, server = destination.split(":", 1)
-        if outbound and server and outbound != "DIRECT":
-            outbound = color_text(outbound, TextColor.BRIGHT_YELLOW)
-            return f"{outbound}:{server}"
 
     # Одиночный outbound
     if destination != "DIRECT" and " " not in destination and ":" not in destination and "->" not in destination and ">>" not in destination:
@@ -358,37 +338,21 @@ def highlight_destination_console(destination: str) -> str:
     return destination
 
 def highlight_destination_rich(destination: str) -> Text:
-    """Подсветка аутбаунда (Rich Text).
-    Поддерживаемые форматы:
-      servername >> outbound
-      servername -> outbound        (НОВЫЙ)
-      SINGLE_OUTBOUND
-    """
     result = Text()
-    
-    # Формат "servername >> outbound"
-    if ">>" in destination:
-        left, right = map(str.strip, destination.split(">>", 1))
-        result.append(left + " >> ")
-        if right != "DIRECT":
-            result.append(right, style="bold magenta")
-        else:
-            result.append(right)
-        return result
 
     # Новый формат "servername -> outbound"
     if "->" in destination:
         left, right = map(str.strip, destination.split("->", 1))
         result.append(left + " -> ")
         if right != "DIRECT":
-            result.append(right, style="bold magenta")
+            result.append(right, style="light green")
         else:
             result.append(right)
         return result
     
     # Одиночный outbound
     if destination != "DIRECT" and " " not in destination and ":" not in destination and "->" not in destination and ">>" not in destination:
-        return Text(destination, style="bold magenta")
+        return Text(destination, style="light green")
         
     return Text(destination)
 
