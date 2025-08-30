@@ -245,8 +245,8 @@ def print_sorted_logs(data):
         for ip, info in sorted(data[email].items()):
             print(f"  IP: {highlight_ip(ip)} ({info['region_asn']})")
             for resource, destination in sorted(info["resources"].items()):
-                dest_display = highlight_destination_console(destination)
-                print(f"    Resource: {highlight_resource(resource)} -> [{dest_display}]")
+                highlighted_dest = highlight_destination_console(destination)
+                print(f"    Resource: {highlight_resource(resource)} -> [{highlighted_dest}]")
 
 
 def print_summary(summary):
@@ -324,24 +324,58 @@ def process_online_mode(logs_iterator, city_reader, asn_reader):
 
 def highlight_destination_console(destination: str) -> str:
     """Подсветка аутбаунда (консоль) если outbound != DIRECT в шаблоне 'servername >> outbound'"""
+    # Поддержка формата "servername >> outbound"
     if ">>" in destination:
         left, right = map(str.strip, destination.split(">>", 1))
         if right != "DIRECT":
             right = color_text(right, TextColor.BRIGHT_YELLOW)
         return f"{left} >> {right}"
+    
+    # Поддержка формата "outbound:servername"
+    if ":" in destination and not destination.startswith("127.0.0.1:"):
+        parts = destination.split(":", 1)
+        if len(parts) == 2:
+            outbound, server = parts
+            if outbound != "DIRECT":
+                outbound = color_text(outbound, TextColor.BRIGHT_YELLOW)
+            return f"{outbound}:{server}"
+    
+    # Если это просто аутбаунд без дополнительной информации
+    if destination != "DIRECT" and " " not in destination and ":" not in destination:
+        return color_text(destination, TextColor.BRIGHT_YELLOW)
+        
     return destination
 
 def highlight_destination_rich(destination: str) -> Text:
     """Подсветка аутбаунда (Rich Text)"""
+    result = Text()
+    
+    # Поддержка формата "servername >> outbound"
     if ">>" in destination:
         left, right = map(str.strip, destination.split(">>", 1))
-        t = Text()
-        t.append(left + " >> ")
+        result.append(left + " >> ")
         if right != "DIRECT":
-            t.append(right, style="bold magenta")
+            result.append(right, style="bold magenta")
         else:
-            t.append(right)
-        return t
+            result.append(right)
+        return result
+    
+    # Поддержка формата "outbound:servername"
+    if ":" in destination and not destination.startswith("127.0.0.1:"):
+        parts = destination.split(":", 1)
+        if len(parts) == 2:
+            outbound, server = parts
+            if outbound != "DIRECT":
+                result.append(outbound, style="bold magenta")
+            else:
+                result.append(outbound)
+            result.append(":" + server)
+            return result
+    
+    # Если это просто аутбаунд без дополнительной информации
+    if destination != "DIRECT" and " " not in destination and ":" not in destination:
+        return Text(destination, style="bold magenta")
+        
     return Text(destination)
 
 class LogApp(App):
